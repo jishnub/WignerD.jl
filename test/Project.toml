@@ -1,0 +1,5 @@
+[deps]
+Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
+PointsOnASphere = "efc6e1ae-3467-11e9-103f-8bc3b66ed045"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"

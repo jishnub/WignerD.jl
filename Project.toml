@@ -1,13 +1,18 @@
 name = "WignerD"
 uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-authors = ["Jishnu Bhattacharya <jishnuonline@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
-Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 PointsOnASphere = "efc6e1ae-3467-11e9-103f-8bc3b66ed045"
-TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"
 WignerSymbols = "9f57e263-0b3d-5e2e-b1be-24f2bb48858b"
+
+[extras]
+Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"
+
+[targets]
+test = ["Legendre", "TwoPointFunctions", "Test"]

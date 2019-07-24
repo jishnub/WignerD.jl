@@ -108,10 +108,9 @@ uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.2"
 
 [[OffsetArrays]]
-deps = ["DelimitedFiles", "Test"]
-git-tree-sha1 = "e6893807f09c1d5517861ded8b203cb96cb7d44a"
+git-tree-sha1 = "1af2f79c7eaac3e019a0de41ef63335ff26a0a57"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "0.10.0"
+version = "0.11.1"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -123,12 +122,6 @@ repo-rev = "master"
 repo-url = "https://github.com/jishnub/PointsOnASphere.jl.git"
 uuid = "efc6e1ae-3467-11e9-103f-8bc3b66ed045"
 version = "0.1.0"
-
-[[Primes]]
-deps = ["Test"]
-git-tree-sha1 = "ff1a2323cb468ec5f201838fcbe3c232266b1f95"
-uuid = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
-version = "0.4.0"
 
 [[Printf]]
 deps = ["Unicode"]
@@ -199,9 +192,3 @@ uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [[Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
-
-[[WignerSymbols]]
-deps = ["LinearAlgebra", "Primes", "Test"]
-git-tree-sha1 = "f7dc002bdfe862713ba7698bef239290248cd81a"
-uuid = "9f57e263-0b3d-5e2e-b1be-24f2bb48858b"
-version = "0.3.0"

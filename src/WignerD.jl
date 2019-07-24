@@ -3,7 +3,9 @@ module WignerD
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
 using PointsOnASphere
 
-export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,djmn,djmatrix,BiPoSH_s0,BiPoSH,BSH,Jy_eigen
+export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
+djmn,djmatrix,BiPoSH_s0,BiPoSH,BSH,Jy_eigen,
+moderange
 
 function djmatrix(j,θ;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
@@ -344,11 +346,7 @@ function BSH(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 	@assert(abs(tmin)<=smax,"tmin=$tmin has to lie in $(-smax):$smax")
 	@assert(abs(tmax)<=smax,"tmin=$tmax has to lie in $(-smax):$smax")
 
-	N_el = 0
-	for t in tmin:tmax, s in smin:smax
-		(abs(t)>s) && continue
-		N_el += 1
-	end
+	N_el = num_modes(smin,smax,tmin,tmax)
 
 	β_range = isa(β_range,Integer) ? (β_range:β_range) : β_range
 	γ_range = isa(γ_range,Integer) ? (γ_range:γ_range) : γ_range
@@ -360,21 +358,56 @@ BSH(s_range::AbstractUnitRange,t_range::AbstractUnitRange,args...) = BSH(minimum
 BSH(s_range::AbstractUnitRange,t::Integer,args...) = BSH(minimum(s_range),maximum(s_range),t,t,args...)
 BSH(s::Integer,t::Integer,args...) = BSH(s,s,t,t,args...)
 
+####################
+# Iterator for modes
+####################
+
+struct moderange
+	smin :: Int64
+	smax :: Int64
+	tmin :: Int64
+	tmax :: Int64
+end
+
+function Base.iterate(m::moderange, state=((max(m.smin,abs(m.tmin)),m.tmin), 1))
+	(s,t), count = state
+
+	if count > length(m)
+		return nothing
+	end
+
+	next_t = (s == m.smax) ? t+1 : t
+	next_s = (s == m.smax) ? max(m.smin,abs(next_t)) : s + 1
+
+	return (s,t), ((next_s,next_t), count + 1)
+end
+
+Base.length(m::moderange) = num_modes(m.smin,m.smax,m.tmin,m.tmax)
+Base.eltype(m::moderange) = Tuple{Int64,Int64} 
+
 function onedindex(s,t,smin,smax,tmin,tmax)
-	@assert(abs(tmin)<=smax,"tmin=$tmin is not consistent with smin=$smax")
+	@assert(abs(tmin)<=smax,"tmin=$tmin is not consistent with smax=$smax")
 	@assert(abs(tmax)<=smax,"tmax=$tmax is not consistent with smax=$smax")
 	@assert(tmin<=t<=tmax,"t=$t does not lie in the range $tmin:$tmax")
 	@assert(smin<=s<=smax,"s=$s does not lie in the range $smin:$smax")
 	@assert(abs(t)<=s,"t=$t is not consistent with s=$s")
 
 	N_skip = 0
-	smin_t = max(abs(t),smin)
 	for ti in tmin:t-1
-		N_skip += smax - smin_t + 1
+		smin_ti = max(abs(ti),smin)
+		N_skip += smax - smin_ti + 1
 	end
+
+	smin_t = max(abs(t),smin)
 	N_skip + s - smin_t + 1
 end
 onedindex(a::BSH,s,t) = onedindex(s,t,a.smin,a.smax,a.tmin,a.tmax)
+
+function num_modes(smin,smax,tmin,tmax)
+	@assert(abs(tmin)<=smax,"tmin=$tmin is not consistent with smax=$smax")
+	@assert(abs(tmax)<=smax,"tmax=$tmax is not consistent with smax=$smax")
+	sum(smax - max(abs(t),smin) + 1 for t in tmin:tmax)
+end
 
 Base.parent(b::BSH) = b.parent
 
@@ -474,7 +507,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	t_range::AbstractUnitRange=-last(s_range):last(s_range),
 	dℓ₁=nothing,dℓ₂=nothing;
 	compute_dℓ₁=false,compute_dℓ₂=false,
-	compute_Yℓ₁=false,compute_Yℓ₂=false,
+	compute_Yℓ₁=true,compute_Yℓ₂=true,
 	wig3j_fn_ptr=nothing)
 
 	if compute_Yℓ₁
