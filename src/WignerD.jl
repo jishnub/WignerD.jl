@@ -1,11 +1,13 @@
 module WignerD
 
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
-using PointsOnASphere
+using PointsOnASphere,SphericalHarmonicModes
+import SphericalHarmonicModes: modeindex, s_valid_range, 
+t_valid_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
 djmn,djmatrix,BiPoSH_s0,BiPoSH,BSH,Jy_eigen,
-moderange
+st,ts,modes,modeindex
 
 function djmatrix(j,θ;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
@@ -224,8 +226,8 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 	end
 	m_max = min(ℓ₁,ℓ₂)
 
-	s_valid = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_intersection = intersect(s_range,s_valid)
+	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
+	s_intersection = intersect(s_range,s_valid_range)
 
 	Y_BSH = zeros(ComplexF64,s_intersection,β:β,γ:γ)
 
@@ -292,8 +294,8 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 
 	m_max = min(ℓ₁,ℓ₂)
 
-	s_valid = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_intersection = intersect(s_valid,s_range)
+	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
+	s_intersection = intersect(s_valid_range,s_range)
 
 	Y_BSH = zeros(ComplexF64,s_intersection,-1:1,-1:1)
 
@@ -329,85 +331,43 @@ BiPoSH_s0(ℓ₁,ℓ₂,s,
 
 # Any t
 
-struct BSH <: AbstractArray{ComplexF64,3}
-	smin :: Int64
-	smax :: Int64
-	tmin :: Int64
-	tmax :: Int64
+struct BSH{T} <: AbstractArray{ComplexF64,3}
+	modes :: T
 	parent :: OffsetArray{ComplexF64,3,Array{ComplexF64,3}}
 end
 
-function BSH(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
+function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 	β_range::Union{Integer,AbstractUnitRange}=-1:1,
-	γ_range::Union{Integer,AbstractUnitRange}=-1:1)
+	γ_range::Union{Integer,AbstractUnitRange}=-1:1) where {T<:SHModeRange}
 
 	@assert(tmin<=tmax,"tmin=$tmin is not less than or equal to tmax=$tmax")
 	@assert(smin<=smax,"smin=$smin is not less than or equal to smax=$smax")
 	@assert(abs(tmin)<=smax,"tmin=$tmin has to lie in $(-smax):$smax")
 	@assert(abs(tmax)<=smax,"tmin=$tmax has to lie in $(-smax):$smax")
 
-	N_el = num_modes(smin,smax,tmin,tmax)
+	modes = st(smin,smax,tmin,tmax)
 
 	β_range = isa(β_range,Integer) ? (β_range:β_range) : β_range
 	γ_range = isa(γ_range,Integer) ? (γ_range:γ_range) : γ_range
 
-	BSH(smin,smax,tmin,tmax,zeros(ComplexF64,N_el,β_range,γ_range))
+	BSH{T}(modes,zeros(ComplexF64,length(modes),β_range,γ_range))
 end
 
-BSH(s_range::AbstractUnitRange,t_range::AbstractUnitRange,args...) = BSH(minimum(s_range),maximum(s_range),minimum(t_range),maximum(t_range),args...)
-BSH(s_range::AbstractUnitRange,t::Integer,args...) = BSH(minimum(s_range),maximum(s_range),t,t,args...)
-BSH(s::Integer,t::Integer,args...) = BSH(s,s,t,t,args...)
+BSH{T}(s_range::AbstractUnitRange,t_range::AbstractUnitRange,args...) where {T<:SHModeRange} = 
+	BSH{T}(minimum(s_range),maximum(s_range),minimum(t_range),maximum(t_range),args...)
+BSH{T}(s_range::AbstractUnitRange,t::Integer,args...) where {T<:SHModeRange} = 
+	BSH{T}(minimum(s_range),maximum(s_range),t,t,args...)
+BSH{T}(s::Integer,t::Integer,args...) where {T<:SHModeRange} = BSH{T}(s,s,t,t,args...)
 
-####################
-# Iterator for modes
-####################
+modes(b::BSH) = b.modes
+modeindex(b::BSH,s::Integer,t::Integer) = modeindex(modes(b),s,t)
+modeindex(b::BSH,::Colon,t::Integer) = 
+	[modeindex(modes(b),s,t)  for s in s_valid_range(b,t)]
 
-struct moderange
-	smin :: Int64
-	smax :: Int64
-	tmin :: Int64
-	tmax :: Int64
-end
+modeindex(b::BSH,s::Integer,::Colon) = 
+	[modeindex(modes(b),s,t)  for t in t_valid_range(b,s)]
 
-function Base.iterate(m::moderange, state=((max(m.smin,abs(m.tmin)),m.tmin), 1))
-	(s,t), count = state
-
-	if count > length(m)
-		return nothing
-	end
-
-	next_t = (s == m.smax) ? t+1 : t
-	next_s = (s == m.smax) ? max(m.smin,abs(next_t)) : s + 1
-
-	return (s,t), ((next_s,next_t), count + 1)
-end
-
-Base.length(m::moderange) = num_modes(m.smin,m.smax,m.tmin,m.tmax)
-Base.eltype(m::moderange) = Tuple{Int64,Int64} 
-
-function onedindex(s,t,smin,smax,tmin,tmax)
-	@assert(abs(tmin)<=smax,"tmin=$tmin is not consistent with smax=$smax")
-	@assert(abs(tmax)<=smax,"tmax=$tmax is not consistent with smax=$smax")
-	@assert(tmin<=t<=tmax,"t=$t does not lie in the range $tmin:$tmax")
-	@assert(smin<=s<=smax,"s=$s does not lie in the range $smin:$smax")
-	@assert(abs(t)<=s,"t=$t is not consistent with s=$s")
-
-	N_skip = 0
-	for ti in tmin:t-1
-		smin_ti = max(abs(ti),smin)
-		N_skip += smax - smin_ti + 1
-	end
-
-	smin_t = max(abs(t),smin)
-	N_skip + s - smin_t + 1
-end
-onedindex(a::BSH,s,t) = onedindex(s,t,a.smin,a.smax,a.tmin,a.tmax)
-
-function num_modes(smin,smax,tmin,tmax)
-	@assert(abs(tmin)<=smax,"tmin=$tmin is not consistent with smax=$smax")
-	@assert(abs(tmax)<=smax,"tmax=$tmax is not consistent with smax=$smax")
-	sum(smax - max(abs(t),smin) + 1 for t in tmin:tmax)
-end
+modeindex(b::BSH,::Colon,::Colon) = axes(parent(b),1)
 
 Base.parent(b::BSH) = b.parent
 
@@ -416,23 +376,21 @@ Base.size(b::BSH,d) = size(parent(b),d)
 Base.axes(b::BSH) = axes(parent(b))
 Base.axes(b::BSH,d) = axes(parent(b),d)
 
-Base.getindex(a::BSH,s,t,args...) = parent(a)[onedindex(a,s,t),args...]
-Base.setindex!(a::BSH,x,s,t,args...) = parent(a)[onedindex(a,s,t),args...] = x
+Base.getindex(b::BSH,s,t,args...) = parent(b)[modeindex(b,s,t),args...]
+Base.setindex!(b::BSH,x,s,t,args...) = parent(b)[modeindex(b,s,t),args...] = x
 
 Base.fill!(a::BSH,x) = fill!(parent(a),x)
 
-function s_valid(b::BSH,t::Integer)
-	@assert(b.tmin<=t<=b.tmax,"t must lie in $(b.tmin):$(b.tmax)")
-	max(abs(t),b.smin):b.smax
-end
+s_valid_range(b::BSH,t::Integer) = s_valid_range(modes(b),t)
+t_valid_range(b::BSH,s::Integer) = t_valid_range(modes(b),s)
 
 function Base.show(io::IO, b::BSH)
     compact = get(io, :compact, false)
 
-    smin = b.smin
-    smax = b.smax
-    tmin = b.tmin
-    tmax = b.tmax
+    smin = b.modes.smin
+    smax = b.modes.smax
+    tmin = b.modes.tmin
+    tmax = b.modes.tmax
     β_range = convert(UnitRange{Int64},axes(parent(b),2))
     γ_range = convert(UnitRange{Int64},axes(parent(b),3))
 
@@ -464,7 +422,7 @@ function BiPoSH(ℓ₁,ℓ₂,s::Integer,t::Integer,
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
-	Y_BSH = BSH(s:s,t:t,β_range,γ_range)
+	Y_BSH = BSH{st}(s:s,t:t,β_range,γ_range)
 
 	for β=β_range,γ=γ_range
 		for m in -ℓ₁:ℓ₁
@@ -491,14 +449,57 @@ function BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	γ = isa(γ,Integer) ? (γ:γ) : γ
 	t = isa(t,Integer) ? (t:t) : t
 
-	Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β)
-	Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ)
+	Y_ℓ₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
+	Y_ℓ₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 
-	BiPoSH!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
-		wig3j_fn_ptr=wig3j_fn_ptr)
+	BiPoSH!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂;
+		β=β,γ=γ,t=t,wig3j_fn_ptr=wig3j_fn_ptr)
 end
 
 function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
+	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
+	Y_ℓ₁,Y_ℓ₂;
+	β::Union{Integer,AbstractUnitRange}=-1:1,
+	γ::Union{Integer,AbstractUnitRange}=-1:1,
+	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
+	wig3j_fn_ptr=nothing)
+
+	β = isa(β,Integer) ? (β:β) : β
+	γ = isa(γ,Integer) ? (γ:γ) : γ
+	t = isa(t,Integer) ? (t:t) : t
+
+	dℓ₁ = zeros(-ℓ₁:ℓ₁,β)
+	dℓ₂ = ((θ₁ == θ₂) && (ℓ₁ == ℓ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
+
+	Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true)
+	Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ != dℓ₂) )
+
+	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
+		wig3j_fn_ptr=wig3j_fn_ptr,compute_Yℓ₁=false,compute_Yℓ₂=false)
+end
+
+function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
+	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
+	Y_ℓ₁,Y_ℓ₂,dℓ₁,dℓ₂;
+	β::Union{Integer,AbstractUnitRange}=-1:1,
+	γ::Union{Integer,AbstractUnitRange}=-1:1,
+	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
+	wig3j_fn_ptr=nothing,compute_d_matrix=true)
+
+	β = isa(β,Integer) ? (β:β) : β
+	γ = isa(γ,Integer) ? (γ:γ) : γ
+	t = isa(t,Integer) ? (t:t) : t
+
+	Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_d_matrix)
+	Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix=(compute_d_matrix & (dℓ₁ != dℓ₂)))
+
+	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
+		wig3j_fn_ptr=wig3j_fn_ptr)
+end
+
+function BiPoSH_compute!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
 	Y_ℓ₁::AbstractArray,Y_ℓ₂::AbstractArray,
@@ -528,7 +529,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
 	s_range = intersect(s_ℓ₁ℓ₂,s_range)
 
-	Y_BSH = BSH(s_range,t_range,β_range,γ_range)
+	Y_BSH = BSH{st}(s_range,t_range,β_range,γ_range)
 
 	lib = nothing
 
@@ -545,9 +546,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 		end
 		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂,t;wig3j_fn_ptr=wig3j_fn_ptr)
 
-		s_t = s_valid(Y_BSH,t)
-
-		for s in intersect(s_t,s_ℓ₁ℓ₂)
+		for s in s_valid_range(Y_BSH,t)
 			Y_BSH[s,t,β,γ] += CG[s]*Y_ℓ₁[m,β]*Y_ℓ₂[n,γ]
 		end
 	end
@@ -559,11 +558,16 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	return Y_BSH
 end
 
-BiPoSH(ℓ₁,ℓ₂,s::Integer,t::Integer,x::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = BiPoSH(ℓ₁,ℓ₂,s,t,(x.θ,x.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
-	x::SphericalPoint,x2::SphericalPoint,
-	args...;kwargs...) = BiPoSH(ℓ₁,ℓ₂,s_range,(x.θ,x.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+BiPoSH(ℓ₁,ℓ₂,s::Integer,t::Integer,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH(ℓ₁,ℓ₂,s,t,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
+BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
+	x1::SphericalPoint,x2::SphericalPoint,
+	args...;kwargs...) = BiPoSH(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+
+BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
+	x1::SphericalPoint,x2::SphericalPoint,
+	args...;kwargs...) = BiPoSH!(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
 ##################################################################################################
 

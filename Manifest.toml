@@ -165,6 +165,13 @@ git-tree-sha1 = "0b45dc2e45ed77f445617b99ff2adf0f5b0f23ea"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "0.7.2"
 
+[[SphericalHarmonicModes]]
+git-tree-sha1 = "fcf8dc5953975300cb77448545aa43c96d6ee541"
+repo-rev = "master"
+repo-url = "https://github.com/jishnub/SphericalHarmonicModes.jl.git"
+uuid = "0e9554e2-b38b-11e9-16d7-9d9abfec665a"
+version = "0.1.4"
+
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
 git-tree-sha1 = "db23bbf50064c582b6f2b9b043c8e7e98ea8c0c6"
