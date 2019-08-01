@@ -359,6 +359,9 @@ BSH{T}(s_range::AbstractUnitRange,t::Integer,args...) where {T<:SHModeRange} =
 	BSH{T}(minimum(s_range),maximum(s_range),t,t,args...)
 BSH{T}(s::Integer,t::Integer,args...) where {T<:SHModeRange} = BSH{T}(s,s,t,t,args...)
 
+Base.similar(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(s_range(b),t_range(b),axes(parent(b))[2:3]...)
+Base.copy(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(modes(b),copy(parent(b)))
+
 modes(b::BSH) = b.modes
 modeindex(b::BSH,s::Integer,t::Integer) = modeindex(modes(b),s,t)
 modeindex(b::BSH,::Colon,t::Integer) = 
@@ -368,6 +371,9 @@ modeindex(b::BSH,s::Integer,::Colon) =
 	[modeindex(modes(b),s,t)  for t in t_valid_range(b,s)]
 
 modeindex(b::BSH,::Colon,::Colon) = axes(parent(b),1)
+
+s_range(b::BSH) = modes(b).smin:modes(b).smax
+t_range(b::BSH) = modes(b).tmin:modes(b).tmax
 
 Base.parent(b::BSH) = b.parent
 
@@ -463,17 +469,22 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
-	wig3j_fn_ptr=nothing)
+	wig3j_fn_ptr=nothing,compute_Yℓ₁=false,compute_Yℓ₂=false)
 
 	β = isa(β,Integer) ? (β:β) : β
 	γ = isa(γ,Integer) ? (γ:γ) : γ
 	t = isa(t,Integer) ? (t:t) : t
 
 	dℓ₁ = zeros(-ℓ₁:ℓ₁,β)
-	dℓ₂ = ((θ₁ == θ₂) && (ℓ₁ == ℓ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
+	dℓ₂ = ((ℓ₁ == ℓ₂) && (θ₁ == θ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
 
-	Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true)
-	Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ != dℓ₂) )
+	if compute_Yℓ₁
+		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true)
+	end
+
+	if compute_Yℓ₂
+		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ != dℓ₂) )
+	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
 		wig3j_fn_ptr=wig3j_fn_ptr,compute_Yℓ₁=false,compute_Yℓ₂=false)
@@ -486,14 +497,21 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
-	wig3j_fn_ptr=nothing,compute_d_matrix=true)
+	wig3j_fn_ptr=nothing,
+	compute_dℓ₁=false,compute_dℓ₂=false,
+	compute_Yℓ₁=false,compute_Yℓ₂=false)
 
 	β = isa(β,Integer) ? (β:β) : β
 	γ = isa(γ,Integer) ? (γ:γ) : γ
 	t = isa(t,Integer) ? (t:t) : t
 
-	Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_d_matrix)
-	Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix=(compute_d_matrix & (dℓ₁ != dℓ₂)))
+	if compute_Yℓ₁
+		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_dℓ₁)
+	end
+	if compute_Yℓ₂
+		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
+			compute_d_matrix=(compute_dℓ₂ && (dℓ₁ != dℓ₂)))
+	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
 		wig3j_fn_ptr=wig3j_fn_ptr)
