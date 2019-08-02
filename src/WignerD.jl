@@ -6,7 +6,7 @@ import SphericalHarmonicModes: modeindex, s_valid_range,
 t_valid_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
-djmn,djmatrix,BiPoSH_s0,BiPoSH,BSH,Jy_eigen,
+djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH!,BSH,Jy_eigen,
 st,ts,modes,modeindex
 
 function djmatrix(j,θ;kwargs...)
@@ -579,13 +579,11 @@ end
 BiPoSH(ℓ₁,ℓ₂,s::Integer,t::Integer,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
 	BiPoSH(ℓ₁,ℓ₂,s,t,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
-BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
-	x1::SphericalPoint,x2::SphericalPoint,
-	args...;kwargs...) = BiPoSH(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
-BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
-	x1::SphericalPoint,x2::SphericalPoint,
-	args...;kwargs...) = BiPoSH!(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH!(ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
 ##################################################################################################
 
