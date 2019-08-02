@@ -390,6 +390,10 @@ Base.fill!(a::BSH,x) = fill!(parent(a),x)
 s_valid_range(b::BSH,t::Integer) = s_valid_range(modes(b),t)
 t_valid_range(b::BSH,s::Integer) = t_valid_range(modes(b),s)
 
+# Convenience function to convert an integer to a UnitRange to be used as an array axis
+to_unitrange(a::Integer) = a:a
+to_unitrange(a::AbstractUnitRange) = a
+
 function Base.show(io::IO, b::BSH)
     compact = get(io, :compact, false)
 
@@ -451,15 +455,14 @@ function BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
 	wig3j_fn_ptr=nothing)
 
-	β = isa(β,Integer) ? (β:β) : β
-	γ = isa(γ,Integer) ? (γ:γ) : γ
-	t = isa(t,Integer) ? (t:t) : t
+	β,γ,t = to_unitrange.((β,γ,t))
 
 	Y_ℓ₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
 	Y_ℓ₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 
 	BiPoSH!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂;
-		β=β,γ=γ,t=t,wig3j_fn_ptr=wig3j_fn_ptr)
+		β=β,γ=γ,t=t,wig3j_fn_ptr=wig3j_fn_ptr,
+		compute_Yℓ₁=true,compute_Yℓ₂=true)
 end
 
 function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
@@ -471,9 +474,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
 	wig3j_fn_ptr=nothing,compute_Yℓ₁=false,compute_Yℓ₂=false)
 
-	β = isa(β,Integer) ? (β:β) : β
-	γ = isa(γ,Integer) ? (γ:γ) : γ
-	t = isa(t,Integer) ? (t:t) : t
+	β,γ,t = to_unitrange.((β,γ,t))
 
 	dℓ₁ = zeros(-ℓ₁:ℓ₁,β)
 	dℓ₂ = ((ℓ₁ == ℓ₂) && (θ₁ == θ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
@@ -483,7 +484,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	end
 
 	if compute_Yℓ₂
-		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ != dℓ₂) )
+		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ !== dℓ₂) )
 	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
@@ -501,20 +502,18 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	compute_dℓ₁=false,compute_dℓ₂=false,
 	compute_Yℓ₁=false,compute_Yℓ₂=false)
 
-	β = isa(β,Integer) ? (β:β) : β
-	γ = isa(γ,Integer) ? (γ:γ) : γ
-	t = isa(t,Integer) ? (t:t) : t
+	β,γ,t = to_unitrange.((β,γ,t))
 
 	if compute_Yℓ₁
 		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_dℓ₁)
 	end
 	if compute_Yℓ₂
 		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
-			compute_d_matrix=(compute_dℓ₂ && (dℓ₁ != dℓ₂)))
+			compute_d_matrix=(compute_dℓ₂ && (dℓ₁ !== dℓ₂)))
 	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
-		wig3j_fn_ptr=wig3j_fn_ptr)
+		wig3j_fn_ptr=wig3j_fn_ptr,compute_Yℓ₁=false,compute_Yℓ₂=false)
 end
 
 function BiPoSH_compute!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
