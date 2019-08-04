@@ -166,7 +166,7 @@ uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "0.7.2"
 
 [[SphericalHarmonicModes]]
-git-tree-sha1 = "fcf8dc5953975300cb77448545aa43c96d6ee541"
+git-tree-sha1 = "d465de36e855829ad8e99d0f4a47e08a57ca5d71"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicModes.jl.git"
 uuid = "0e9554e2-b38b-11e9-16d7-9d9abfec665a"
