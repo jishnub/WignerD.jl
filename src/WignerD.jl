@@ -190,6 +190,10 @@ end
 
 ##################################################################################################
 
+# Convenience function to convert an integer to a UnitRange to be used as an array axis
+to_unitrange(a::Integer) = a:a
+to_unitrange(a::AbstractUnitRange) = a
+
 # Only t=0
 function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,β::Integer,γ::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
@@ -340,23 +344,22 @@ function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 	β_range::Union{Integer,AbstractUnitRange}=-1:1,
 	γ_range::Union{Integer,AbstractUnitRange}=-1:1) where {T<:SHModeRange}
 
-	@assert(tmin<=tmax,"tmin=$tmin is not less than or equal to tmax=$tmax")
-	@assert(smin<=smax,"smin=$smin is not less than or equal to smax=$smax")
-	@assert(abs(tmin)<=smax,"tmin=$tmin has to lie in $(-smax):$smax")
-	@assert(abs(tmax)<=smax,"tmin=$tmax has to lie in $(-smax):$smax")
+	modes = T(smin,smax,tmin,tmax)
 
-	modes = st(smin,smax,tmin,tmax)
-
-	β_range = isa(β_range,Integer) ? (β_range:β_range) : β_range
-	γ_range = isa(γ_range,Integer) ? (γ_range:γ_range) : γ_range
+	β_range,γ_range = to_unitrange.((β_range,γ_range))
 
 	BSH{T}(modes,zeros(ComplexF64,length(modes),β_range,γ_range))
 end
 
 BSH{T}(s_range::AbstractUnitRange,t_range::AbstractUnitRange,args...) where {T<:SHModeRange} = 
 	BSH{T}(minimum(s_range),maximum(s_range),minimum(t_range),maximum(t_range),args...)
+
 BSH{T}(s_range::AbstractUnitRange,t::Integer,args...) where {T<:SHModeRange} = 
 	BSH{T}(minimum(s_range),maximum(s_range),t,t,args...)
+
+BSH{T}(s::Integer,t_range::AbstractUnitRange,args...) where {T<:SHModeRange} = 
+	BSH{T}(s,s,minimum(t_range),maximum(t_range),args...)
+
 BSH{T}(s::Integer,t::Integer,args...) where {T<:SHModeRange} = BSH{T}(s,s,t,t,args...)
 
 Base.similar(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(s_range(b),t_range(b),axes(parent(b))[2:3]...)
@@ -389,10 +392,6 @@ Base.fill!(a::BSH,x) = fill!(parent(a),x)
 
 s_valid_range(b::BSH,t::Integer) = s_valid_range(modes(b),t)
 t_valid_range(b::BSH,s::Integer) = t_valid_range(modes(b),s)
-
-# Convenience function to convert an integer to a UnitRange to be used as an array axis
-to_unitrange(a::Integer) = a:a
-to_unitrange(a::AbstractUnitRange) = a
 
 function Base.show(io::IO, b::BSH)
     compact = get(io, :compact, false)
