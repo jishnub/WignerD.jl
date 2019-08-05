@@ -7,7 +7,7 @@ t_valid_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
 djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH!,BSH,Jy_eigen,
-st,ts,modes,modeindex
+st,ts,modes,modeindex,SphericalHarmonic,SphericalHarmonic!
 
 function djmatrix(j,θ;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
@@ -186,6 +186,23 @@ function coeffi(j)
 	end
 
 	return Hermitian(A)
+end
+
+function SphericalHarmonic(args...;kwargs...)
+	Y = Ylmatrix(args...;kwargs...,n_range=0:0)
+	m_range = axes(Y,1)
+	Y[Base.IdentityUnitRange(m_range),0]
+end
+
+function SphericalHarmonic!(Y::AbstractMatrix{ComplexF64},args...;kwargs...)
+	Ylmatrix!(Y,args...;kwargs...,n_range=0:0)
+	m_range = get(kwargs,:m_range,axes(Y,1))
+	Y[Base.IdentityUnitRange(m_range),0]
+end
+
+function SphericalHarmonic!(Y::AbstractVector{ComplexF64},args...;kwargs...)
+	Y2D = reshape(Y,axes(Y,1),0:0)
+	SphericalHarmonic!(Y2D,args...;kwargs...)
 end
 
 ##################################################################################################
