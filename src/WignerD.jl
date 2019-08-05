@@ -177,6 +177,10 @@ function coeffi(j)
 	N = 2j+1
 	A = zeros(ComplexF64,N,N)
 
+	if iszero(j)
+		return Hermitian(A)
+	end
+
 	A[1,2]=-X(j,-j+1)/2im
     A[N,N-1]=X(j,-j+1)/2im
 
