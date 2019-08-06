@@ -564,6 +564,7 @@ function BiPoSH_compute!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 
 	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
 	s_range = intersect(s_ℓ₁ℓ₂,s_range)
+	t_range = intersect(-maximum(s_range):maximum(s_range),t_range)
 
 	Y_BSH = BSH{st}(s_range,t_range,β_range,γ_range)
 
