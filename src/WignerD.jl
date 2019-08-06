@@ -7,7 +7,7 @@ t_valid_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
 djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH!,BSH,Jy_eigen,
-st,ts,modes,modeindex,SphericalHarmonic,SphericalHarmonic!
+st,ts,modes,modeindex,SphericalHarmonic,SphericalHarmonic!,st,ts
 
 function djmatrix(j,θ;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
@@ -44,7 +44,7 @@ function djmatrix!(dj,j,θ::Real;kwargs...)
 	if isnothing(λ) && isnothing(v)
 		λ,v = Jy_eigen(j)
 	elseif isnothing(λ)
-		λ = Float64.(-j:j)
+		λ = Float64(-j):Float64(j)
 	end
 
 	# check if symmetry conditions allow the index to be evaluated
@@ -473,7 +473,7 @@ function BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
-	wig3j_fn_ptr=nothing)
+	kwargs...)
 
 	β,γ,t = to_unitrange.((β,γ,t))
 
@@ -481,8 +481,7 @@ function BiPoSH(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	Y_ℓ₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 
 	BiPoSH!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂;
-		β=β,γ=γ,t=t,wig3j_fn_ptr=wig3j_fn_ptr,
-		compute_Yℓ₁=true,compute_Yℓ₂=true)
+		β=β,γ=γ,t=t,compute_Yℓ₁=true,compute_Yℓ₂=true,kwargs...)
 end
 
 function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
@@ -492,7 +491,7 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
-	wig3j_fn_ptr=nothing,compute_Yℓ₁=false,compute_Yℓ₂=false)
+	wig3j_fn_ptr=nothing,compute_Yℓ₁=false,compute_Yℓ₂=false,kwargs...)
 
 	β,γ,t = to_unitrange.((β,γ,t))
 
@@ -500,11 +499,11 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	dℓ₂ = ((ℓ₁ == ℓ₂) && (θ₁ == θ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
 
 	if compute_Yℓ₁
-		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true)
+		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true,kwargs...)
 	end
 
 	if compute_Yℓ₂
-		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ !== dℓ₂) )
+		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ !== dℓ₂),kwargs...)
 	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
@@ -520,16 +519,16 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 	t::Union{Integer,AbstractUnitRange}=-last(s_range):last(s_range),
 	wig3j_fn_ptr=nothing,
 	compute_dℓ₁=false,compute_dℓ₂=false,
-	compute_Yℓ₁=false,compute_Yℓ₂=false)
+	compute_Yℓ₁=false,compute_Yℓ₂=false,kwargs...)
 
 	β,γ,t = to_unitrange.((β,γ,t))
 
 	if compute_Yℓ₁
-		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_dℓ₁)
+		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=compute_dℓ₁,kwargs...)
 	end
 	if compute_Yℓ₂
 		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
-			compute_d_matrix=(compute_dℓ₂ && (dℓ₁ !== dℓ₂)))
+			compute_d_matrix=(compute_dℓ₂ && (dℓ₁ !== dℓ₂)),kwargs...)
 	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
