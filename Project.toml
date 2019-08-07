@@ -1,6 +1,6 @@
 name = "WignerD"
 uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-version = "0.1.4"
+version = "0.1.5"
 
 [deps]
 Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"

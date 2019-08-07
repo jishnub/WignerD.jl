@@ -97,7 +97,7 @@ end
 	ℓ = rand(1:30)
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
-	b_st = BiPoSH(ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0:0)
+	b_st = BiPoSH(ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0)
 	b_s0 = BiPoSH_s0(ℓ,ℓ,0:2ℓ,0,0,n1,n2)
 	@test parent(parent(b_st)) ≈ parent(b_s0)
 end

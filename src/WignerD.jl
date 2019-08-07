@@ -34,6 +34,31 @@ function Jy_eigen(j)
 	return λ,v
 end
 
+##########################################################################
+# Wigner d matrix
+##########################################################################
+
+X(j,n) = sqrt((j+n)*(j-n+1))
+
+function coeffi(j)
+	N = 2j+1
+	A = zeros(ComplexF64,N,N)
+
+	if iszero(j)
+		return Hermitian(A)
+	end
+
+	A[1,2]=-X(j,-j+1)/2im
+    A[N,N-1]=X(j,-j+1)/2im
+
+    @inbounds for i in 2:N-1
+	    A[i,i+1]=-X(j,-j+i)/2im
+	    A[i,i-1]=X(j,j-i+2)/2im
+	end
+
+	return Hermitian(A)
+end
+
 function djmatrix!(dj,j,θ::Real;kwargs...)
 
 	λ = get(kwargs,:λ,nothing)
@@ -108,6 +133,21 @@ djmatrix!(dj,j,x::SphericalPoint;kwargs...) = djmatrix(dj,j,x.θ;kwargs...)
 djmatrix!(dj,j,m,n,θ::Real;kwargs...) = djmatrix(dj,j,θ,m_range=m:m,n_range=n:n;kwargs...)
 djmatrix!(dj,j,m,n,x::SphericalPoint;kwargs...) = djmatrix(dj,j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
 
+function djmatrix!(djp1::T,dj::T,djm1::T,j::Integer,θ::Real;kwargs...) where {Matrix{Float64}<:T<:Matrix{Float64}}
+
+	# Use recursion relation 1 from Varshalovich section 4.8.1
+	# this works for |m|<=j-1 and |n|<=j-1
+	for (m,n) in Iterators.product(axes(djm1,1),axes(djm1,2))
+		djp1[m,n] = -(j+1)/j*√((j^2-m^2)*(j^2-n^2)/(((j+1)^2-m^2)*((j+1)^2-n^2)))*djm1[m,n] +
+					(j+1)*(2j+1)/√(((j+1)^2-m^2)*((j+1)^2-n^2))*(cos(θ)-m*n/(j*(j+1)))*dj[m,n]
+	end
+	
+end
+
+##########################################################################
+# Generalized spherical harmonics
+##########################################################################
+
 function Ylmatrix(l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 
 	n_range=get(kwargs,:n_range,-1:1)
@@ -171,26 +211,9 @@ Ylmatrix(dj_θ::AbstractArray,l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:
 Ylmatrix(dj_θ::AbstractArray,l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
 Ylmatrix(dj_θ::AbstractArray,l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(dj_θ,l,(x.θ,x.ϕ);kwargs...)
 
-X(j,n) = sqrt((j+n)*(j-n+1))
-
-function coeffi(j)
-	N = 2j+1
-	A = zeros(ComplexF64,N,N)
-
-	if iszero(j)
-		return Hermitian(A)
-	end
-
-	A[1,2]=-X(j,-j+1)/2im
-    A[N,N-1]=X(j,-j+1)/2im
-
-    @inbounds for i in 2:N-1
-	    A[i,i+1]=-X(j,-j+i)/2im
-	    A[i,i-1]=X(j,j-i+2)/2im
-	end
-
-	return Hermitian(A)
-end
+##########################################################################
+# Spherical harmonics
+##########################################################################
 
 function SphericalHarmonic(args...;kwargs...)
 	Y = Ylmatrix(args...;kwargs...,n_range=0:0)
@@ -208,6 +231,10 @@ function SphericalHarmonic!(Y::AbstractVector{ComplexF64},args...;kwargs...)
 	Y2D = reshape(Y,axes(Y,1),0:0)
 	SphericalHarmonic!(Y2D,args...;kwargs...)
 end
+
+##########################################################################
+# Bipolar Spherical harmonics
+##########################################################################
 
 ##################################################################################################
 
@@ -362,14 +389,31 @@ struct BSH{T} <: AbstractArray{ComplexF64,3}
 end
 
 function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
+	β_range::Union{Integer,AbstractUnitRange},
+	γ_range::Union{Integer,AbstractUnitRange},
+	arr::OffsetArray{ComplexF64,3,Array{ComplexF64,3}}) where {T<:SHModeRange}
+
+	st_iterator = T(smin,smax,tmin,tmax)
+	β_range,γ_range = to_unitrange.((β_range,γ_range))
+	BSH{T}(st_iterator,arr)
+end
+
+function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
+	β_range::Union{Integer,AbstractUnitRange},
+	γ_range::Union{Integer,AbstractUnitRange},
+	arr::AbstractArray{ComplexF64,3}) where {T<:SHModeRange}
+
+	BSH{T}(smin,smax,tmin,tmax,β_range,γ_range,
+		OffsetArray(arr,axes(arr,1),β_range,γ_range))
+end
+
+function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 	β_range::Union{Integer,AbstractUnitRange}=-1:1,
 	γ_range::Union{Integer,AbstractUnitRange}=-1:1) where {T<:SHModeRange}
 
-	modes = T(smin,smax,tmin,tmax)
-
-	β_range,γ_range = to_unitrange.((β_range,γ_range))
-
-	BSH{T}(modes,zeros(ComplexF64,length(modes),β_range,γ_range))
+	st_iterator = T(smin,smax,tmin,tmax)
+	BSH{T}(st_iterator,
+		zeros(ComplexF64,length(st_iterator),β_range,γ_range))
 end
 
 BSH{T}(s_range::AbstractUnitRange,t_range::AbstractUnitRange,args...) where {T<:SHModeRange} = 
@@ -454,7 +498,7 @@ function BiPoSH(ℓ₁,ℓ₂,s::Integer,t::Integer,
 
 	Y_BSH = BSH{st}(s:s,t:t,β_range,γ_range)
 
-	for β=β_range,γ=γ_range
+	for γ in γ_range,β in β_range
 		for m in -ℓ₁:ℓ₁
 			n = t - m
 			if abs(n)>ℓ₂
@@ -495,15 +539,15 @@ function BiPoSH!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 
 	β,γ,t = to_unitrange.((β,γ,t))
 
-	dℓ₁ = zeros(-ℓ₁:ℓ₁,β)
-	dℓ₂ = ((ℓ₁ == ℓ₂) && (θ₁ == θ₂)) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
-
 	if compute_Yℓ₁
+		dℓ₁ = zeros(-ℓ₁:ℓ₁,β)
 		Ylmatrix!(Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,compute_d_matrix=true,kwargs...)
 	end
 
 	if compute_Yℓ₂
-		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,compute_d_matrix = (dℓ₁ !== dℓ₂),kwargs...)
+		dℓ₂ = ((ℓ₁ == ℓ₂) && (θ₁ == θ₂) && compute_Yℓ₁) ? dℓ₁ : zeros(-ℓ₂:ℓ₂,γ)
+		Ylmatrix!(Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
+			compute_d_matrix = compute_Yℓ₁ && (dℓ₁ !== dℓ₂),kwargs...)
 	end
 
 	BiPoSH_compute!(ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,t;
@@ -575,7 +619,7 @@ function BiPoSH_compute!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	for β in β_range, γ in γ_range, t in t_range, m in -ℓ₁:ℓ₁
+	@inbounds for γ in γ_range,β in β_range, t in t_range, m in -ℓ₁:ℓ₁
 		
 		n = t - m
 		if abs(n) > ℓ₂
@@ -583,7 +627,7 @@ function BiPoSH_compute!(ℓ₁,ℓ₂,s_range::AbstractUnitRange,
 		end
 		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂,t;wig3j_fn_ptr=wig3j_fn_ptr)
 
-		for s in s_valid_range(Y_BSH,t)
+		@inbounds for s in s_valid_range(Y_BSH,t)
 			Y_BSH[s,t,β,γ] += CG[s]*Y_ℓ₁[m,β]*Y_ℓ₂[n,γ]
 		end
 	end
