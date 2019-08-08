@@ -133,17 +133,6 @@ djmatrix!(dj,j,x::SphericalPoint;kwargs...) = djmatrix(dj,j,x.θ;kwargs...)
 djmatrix!(dj,j,m,n,θ::Real;kwargs...) = djmatrix(dj,j,θ,m_range=m:m,n_range=n:n;kwargs...)
 djmatrix!(dj,j,m,n,x::SphericalPoint;kwargs...) = djmatrix(dj,j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
 
-function djmatrix!(djp1::T,dj::T,djm1::T,j::Integer,θ::Real;kwargs...) where {Matrix{Float64}<:T<:Matrix{Float64}}
-
-	# Use recursion relation 1 from Varshalovich section 4.8.1
-	# this works for |m|<=j-1 and |n|<=j-1
-	for (m,n) in Iterators.product(axes(djm1,1),axes(djm1,2))
-		djp1[m,n] = -(j+1)/j*√((j^2-m^2)*(j^2-n^2)/(((j+1)^2-m^2)*((j+1)^2-n^2)))*djm1[m,n] +
-					(j+1)*(2j+1)/√(((j+1)^2-m^2)*((j+1)^2-n^2))*(cos(θ)-m*n/(j*(j+1)))*dj[m,n]
-	end
-	
-end
-
 ##########################################################################
 # Generalized spherical harmonics
 ##########################################################################
