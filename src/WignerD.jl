@@ -113,8 +113,8 @@ function djmatrix!(dj,j,θ::Real;kwargs...)
 			dj[n,m] = real(dj_n_m)
 			inds_covered[n,m] = true
 		end
-		
 	end
+	return dj
 end
 
 function djmatrix(j,θ;kwargs...)
@@ -122,7 +122,6 @@ function djmatrix(j,θ;kwargs...)
 	n_range=get(kwargs,:n_range,-j:j)
 	dj = zeros(m_range,n_range)
 	djmatrix!(dj,j,θ;m_range=m_range,n_range=n_range,kwargs...)
-	return dj
 end
 
 djmatrix(j,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ;kwargs...)
