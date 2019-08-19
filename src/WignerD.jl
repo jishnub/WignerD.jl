@@ -2,8 +2,8 @@ module WignerD
 
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
 using PointsOnASphere,SphericalHarmonicModes
-import SphericalHarmonicModes: modeindex, s_valid_range, 
-t_valid_range
+using SphericalHarmonics
+import SphericalHarmonicModes: modeindex, s_valid_range, t_valid_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
 djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH!,BSH,Jy_eigen,
@@ -18,9 +18,17 @@ X(j,n) = sqrt((j+n)*(j-n+1))
 function coeffi(j)
 	N = 2j+1
 	A = zeros(ComplexF64,N,N)
+	coeffi!(j,A)
+end
+
+function coeffi!(j,A::Matrix{ComplexF64})
+
+	N = 2j+1
+	Av = @view A[1:N,1:N]
 
 	if iszero(j)
-		return Hermitian(A)
+		Av[1,1] = zero(ComplexF64)
+		return Hermitian(Av)
 	end
 
 	A[1,2]=-X(j,-j+1)/2im
@@ -51,22 +59,28 @@ function Jy_eigen(j)
 	return λ,v
 end
 
-function djmatrix!(dj,j,θ::Real;kwargs...)
-
-	λ = get(kwargs,:λ,nothing)
-	v = get(kwargs,:v,nothing)
-	m_range=get(kwargs,:m_range,-j:j)
-	n_range=get(kwargs,:n_range,-j:j)
-
-	if isnothing(λ) && isnothing(v)
-		λ,v = Jy_eigen(j)
-	elseif isnothing(λ)
-		λ = Float64(-j):Float64(j)
+function Jy_eigen!(j,A)
+	A_filled = coeffi!(j,A)
+	λ,v = eigen!(A_filled)
+	# We know that the eigenvalues of Jy are m ∈ -j:j, 
+	# so we can round λ to integers and gain accuracy
+	λ = round.(λ)
+	#sort the array
+	if issorted(λ)
+		v = OffsetArray(permutedims(v),-j:j,-j:j)
+		λ = OffsetArray(λ,-j:j)
+	else
+		p = sortperm(λ)
+		v = OffsetArray(permutedims(v[:,p]),-j:j,-j:j)
+		λ = OffsetArray(λ[p],-j:j)
 	end
+	return λ,v
+end
+
+function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
 
 	# check if symmetry conditions allow the index to be evaluated
-	inds_covered = OffsetArray(falses(length(m_range),length(n_range)),
-					m_range,n_range)
+	inds_covered = falses(m_range,n_range)
 
 	@inbounds for (m,n) in Iterators.product(m_range,n_range)
 
@@ -76,13 +90,13 @@ function djmatrix!(dj,j,θ::Real;kwargs...)
 		dj_m_n_πmθ = zero(ComplexF64)
 		dj_n_m = zero(ComplexF64)
 
-		@inbounds for 𝑈 in axes(λ,1)
-			dj_m_n += cis(-λ[𝑈]*θ) * v[𝑈,m] * conj(v[𝑈,n])
+		@inbounds for μ in axes(λ,1)
+			dj_m_n += cis(-λ[μ]*θ) * v[μ,m] * conj(v[μ,n])
 			if m != n
-				dj_n_m += cis(-λ[𝑈]*(-θ)) * v[𝑈,m] * conj(v[𝑈,n])
+				dj_n_m += cis(-λ[μ]*(-θ)) * v[μ,m] * conj(v[μ,n])
 			end
 			
-			dj_m_n_πmθ += cis(-λ[𝑈]*(π-θ)) * v[𝑈,m] * conj(v[𝑈,n])
+			dj_m_n_πmθ += cis(-λ[μ]*(π-θ)) * v[μ,m] * conj(v[μ,n])
 			
 		end
 
@@ -114,12 +128,67 @@ function djmatrix!(dj,j,θ::Real;kwargs...)
 			inds_covered[n,m] = true
 		end
 	end
+
 	return dj
 end
 
-function djmatrix(j,θ;kwargs...)
+read_or_compute_eigen(j,::Nothing,::Nothing) = Jy_eigen(j)
+read_or_compute_eigen(j,::Nothing,v) = (Float64(-j):Float64(j),v)
+read_or_compute_eigen(j,λ,v) = (λ,v)
+
+read_or_compute_eigen!(j,A,::Nothing,::Nothing) = Jy_eigen!(j,A)
+read_or_compute_eigen!(j,A,::Nothing,v) = read_or_compute_eigen(j,v)
+read_or_compute_eigen!(j,A,λ,v) = (λ,v)
+
+struct djindices end
+struct GSHindices end
+struct OSHindices end
+
+function get_m_n_ranges(j,::djindices;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
 	n_range=get(kwargs,:n_range,-j:j)
+	return m_range,n_range
+end
+
+function get_m_n_ranges(j,::GSHindices;kwargs...)
+	m_range=get(kwargs,:m_range,-j:j)
+	n_range=get(kwargs,:n_range,-1:1)
+	return m_range,n_range
+end
+
+function get_m_n_ranges(j,::OSHindices;kwargs...)
+	m_range=get(kwargs,:m_range,-j:j)
+	n_range=0:0
+	return m_range,n_range
+end
+
+# Default to full range
+get_m_n_ranges(j;kwargs...) = get_m_n_ranges(j,djindices();kwargs...)
+
+function djmatrix!(dj,j,θ::Real;kwargs...)
+
+	λ = get(kwargs,:λ,nothing)
+	v = get(kwargs,:v,nothing)
+	m_range,n_range = get_m_n_ranges(j;kwargs...)
+
+	λ,v = read_or_compute_eigen(j,λ,v)
+
+	djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
+end
+
+function djmatrix!(dj,j,θ::Real,A::Matrix{ComplexF64};kwargs...)
+
+	λ = get(kwargs,:λ,nothing)
+	v = get(kwargs,:v,nothing)
+	m_range,n_range = get_m_n_ranges(j;kwargs...)
+
+	λ,v = read_or_compute_eigen!(j,A,λ,v)
+
+	djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
+end
+
+function djmatrix(j,θ;kwargs...)
+	m_range,n_range = get_m_n_ranges(j;kwargs...)
 	dj = zeros(m_range,n_range)
 	djmatrix!(dj,j,θ;m_range=m_range,n_range=n_range,kwargs...)
 end
@@ -128,98 +197,208 @@ djmatrix(j,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ;kwargs...)
 djmatrix(j,m,n,θ::Real;kwargs...) = djmatrix(j,θ,m_range=m:m,n_range=n:n;kwargs...)
 djmatrix(j,m,n,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
 
-djmatrix!(dj::AbstractArray{<:Real},j,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ;kwargs...)
-djmatrix!(dj::AbstractArray{<:Real},j,m,n,θ::Real;kwargs...) = djmatrix!(dj,j,θ,m_range=m:m,n_range=n:n;kwargs...)
-djmatrix!(dj::AbstractArray{<:Real},j,m,n,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ;kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,θ::Real;kwargs...) = djmatrix!(dj,j,θ,m_range=m:m,n_range=n:n;kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
 
 ##########################################################################
 # Generalized spherical harmonics
+# Resort to spherical harmonics if n=0
 ##########################################################################
 
-function Ylmatrix(l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+abstract type AbstractSH end
+struct GSH <: AbstractSH end # Generalized SH
+struct OSH <: AbstractSH end # Ordinary SH
 
-	n_range=get(kwargs,:n_range,-1:1)
+# Use the generalized spherical harmonics by default
+Ylmatrix(args...;kwargs...) = Ylmatrix(GSH(),args...;kwargs...)
+Ylmatrix!(args...;kwargs...) = Ylmatrix!(GSH(),args...;kwargs...)
+
+function Ylmatrix(::GSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+
+	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
 
 	dj_θ = djmatrix(l,θ;kwargs...,n_range=n_range)
 	Y = zeros(ComplexF64,axes(dj_θ)...)
 	Ylmatrix!(Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
-
-	return Y
 end
 
-function Ylmatrix(dj_θ::AbstractArray{<:Real},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function Ylmatrix(::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 
-	n_range=get(kwargs,:n_range,-1:1)
+	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
 	m_range = axes(dj_θ,1)
 
 	Y = zeros(ComplexF64,m_range,n_range)
 	Ylmatrix!(Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,n_range=n_range,kwargs...)
-
-	return Y
 end
 
-function Ylmatrix!(Y::AbstractArray{ComplexF64},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
-
-	n_range=get(kwargs,:n_range,-1:1)
-
-	dj_θ = djmatrix(l,θ;kwargs...,n_range=n_range)
-
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
-
-	return Y
+function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+	m_range,n_range = get_m_n_ranges(l,OSHindices();kwargs...)
+	Y = zeros(ComplexF64,m_range,n_range)
+	Ylmatrix!(OSH(),Y,l,(θ,ϕ);kwargs...)
 end
 
-function Ylmatrix!(Y::AbstractArray{ComplexF64},dj_θ::AbstractArray,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},l::Integer,
+	(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...)
 
-	n_range=get(kwargs,:n_range,-1:1)
-	m_range = get(kwargs,:m_range,-l:l)
+	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
+
+	dj_θ = zeros(m_range,n_range)
+
+	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;n_range=n_range,kwargs...,compute_d_matrix=true)
+end
+
+function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},
+	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...)
+
+	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
 
 	if get(kwargs,:compute_d_matrix,false):: Bool
-		djmatrix!(dj_θ,l,θ;kwargs...,n_range=n_range)
+		djmatrix!(dj_θ,l,θ,args...;kwargs...,n_range=n_range)
 	end
 
 	@inbounds for (m,n) in Iterators.product(m_range,n_range)
 		Y[m,n] = √((2l+1)/4π) * dj_θ[m,n] * cis(m*ϕ)
 	end
+	return Y
 end
 
-Ylmatrix(l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = Ylmatrix(l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix(l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix(l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(l,(x.θ,x.ϕ);kwargs...)
+function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+	YSH = SphericalHarmonics.allocate_y(l)
+	Ylmatrix!(OSH(),Y,l,(θ,ϕ),YSH;kwargs...,compute_Ylm=true,compute_Pl=true)
+end
 
-Ylmatrix(dj_θ::AbstractArray{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = Ylmatrix(dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix(dj_θ::AbstractArray{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix(dj_θ::AbstractArray{<:Real},l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(dj_θ,l,(x.θ,x.ϕ);kwargs...)
+function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
+	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
+	YSH::AbstractVector{<:Complex};kwargs...)
 
-Ylmatrix!(Y::AbstractArray{ComplexF64},dj_θ::AbstractArray{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = Ylmatrix!(Y,dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix!(Y::AbstractArray{ComplexF64},dj_θ::AbstractArray{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = Ylmatrix!(Y,dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix!(Y::AbstractArray{ComplexF64},dj_θ::AbstractArray{<:Real},l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix!(Y,dj_θ,l,(x.θ,x.ϕ);kwargs...)
+	P = get(kwargs,:compute_Pl,false) ? compute_p(l,cos(θ)) : nothing
+	
+	Ylmatrix!(OSH(),Y,l,(θ,ϕ),P,YSH;kwargs...)
+end
 
-Ylmatrix!(Y::AbstractArray{ComplexF64},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = Ylmatrix!(Y,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix!(Y::AbstractArray{ComplexF64},l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = Ylmatrix!(Y,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-Ylmatrix!(Y::AbstractArray{ComplexF64},l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix!(Y,l,(x.θ,x.ϕ);kwargs...)
+function YSH_loop!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
+	l::Integer,m_range::AbstractUnitRange)
 
-Ylmatrix!(Y::AbstractArray{ComplexF64},::Nothing,args...;kwargs...) = Ylmatrix!(Y,args...;kwargs...)
+	@inbounds for m in m_range
+		lmind = index_y(l,m)
+		Y[m,0] = YSH[lmind]
+	end
+end
+
+function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
+	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
+	P::Vector{<:Real},YSH::AbstractVector{<:Complex};kwargs...)
+
+	m_range = first(get_m_n_ranges(l,OSHindices();kwargs...))
+
+	if get(kwargs,:compute_Pl,false)
+		coeff = SphericalHarmonics.compute_coefficients(l)
+		compute_p!(l,cos(θ),coeff,P)
+	end
+
+	if get(kwargs,:compute_Ylm,false)
+		compute_y!(l,cos(θ),ϕ,P,YSH)
+	end
+
+	YSH_loop!(Y,YSH,l,m_range)
+
+	return Y
+end
+
+function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
+	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
+	P::Nothing,YSH::AbstractVector{<:Complex};kwargs...)
+
+	m_range = first(get_m_n_ranges(l,OSHindices();kwargs...))
+	if get(kwargs,:compute_Ylm,false)
+		compute_y!(l,cos(θ),ϕ,YSH)
+	end
+	YSH_loop!(Y,YSH,l,m_range)
+	return Y
+end
+
+Ylmatrix(T::GSH,l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
+	Ylmatrix(T,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix(T::OSH,l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
+	Ylmatrix(T,l,(θ,ϕ);kwargs...,m_range=m:m)
+
+Ylmatrix(T::GSH,l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix(T::OSH,l::Integer,m::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix(T::AbstractSH,l::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...)
+
+Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
+	Ylmatrix(T,dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix(T::OSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
+	Ylmatrix(T,dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m)
+
+Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix(T::OSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m)
+
+Ylmatrix(T::AbstractSH,dj_θ::AbstractMatrix{<:Real},l::Integer,x::SphericalPoint;kwargs...) = 
+	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...)
+
+Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
+	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
+	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m)
+
+Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...)
+
+Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
+	Ylmatrix!(T,Y,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
+	Ylmatrix!(T,Y,l,(θ,ϕ),args...;kwargs...,m_range=m:m)
+
+Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,n::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+
+Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m)
+
+Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},l::Integer,x::SphericalPoint,args...;kwargs...) = 
+	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...)
+
+Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},::Nothing,args...;kwargs...) = 
+	Ylmatrix!(T,Y,args...;kwargs...)
 
 ##########################################################################
 # Spherical harmonics
 ##########################################################################
 
 function SphericalHarmonic(args...;kwargs...)
-	Y = Ylmatrix(args...;kwargs...,n_range=0:0)
-	m_range = axes(Y,1)
-	Y[Base.IdentityUnitRange(m_range),0]
+	Y = Ylmatrix(OSH(),args...;kwargs...)
+	Y[:,0]
 end
 
-function SphericalHarmonic!(Y::AbstractMatrix{ComplexF64},args...;kwargs...)
-	Ylmatrix!(Y,args...;kwargs...,n_range=0:0)
-	m_range = get(kwargs,:m_range,axes(Y,1))
-	Y[Base.IdentityUnitRange(m_range),0]
+function SphericalHarmonic!(Y::AbstractMatrix{<:Complex},args...;kwargs...)
+	Y = Ylmatrix!(OSH(),Y,args...;kwargs...)
+	Y[:,0]
 end
 
-function SphericalHarmonic!(Y::AbstractVector{ComplexF64},args...;kwargs...)
+function SphericalHarmonic!(Y::AbstractVector{<:Complex},args...;kwargs...)
 	Y2D = reshape(Y,axes(Y,1),0:0)
 	SphericalHarmonic!(Y2D,args...;kwargs...)
+	Y2D[:,0]
 end
 
 ##########################################################################
