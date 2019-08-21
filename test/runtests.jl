@@ -25,17 +25,40 @@ end
 end
 
 @testset "Clebsch-Gordan" begin
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,1,1)[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,1,1)[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,1,1)[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
+	@testset "allocating" begin
+		CG = WignerD.CG_ℓ₁mℓ₂nst(1,1,1)
 
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)[0] ≈ WignerD.clebschgordan(1,-1,1,1,0,0) ≈ 1/√3
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)[1] ≈ WignerD.clebschgordan(1,-1,1,1,1,0) ≈ -1/√2
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)[2] ≈ WignerD.clebschgordan(1,-1,1,1,2,0) ≈ 1/√6
+		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
+		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
+		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
 
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,0,1)[0] ≈ WignerD.clebschgordan(1,0,1,0,0,0) ≈ -1/√3
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,0,1)[1] ≈ WignerD.clebschgordan(1,0,1,0,1,0) ≈ 0
-	@test WignerD.CG_ℓ₁mℓ₂nst(1,0,1)[2] ≈ WignerD.clebschgordan(1,0,1,0,2,0) ≈ √(2/3)
+		CG = WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)
+
+		@test CG[0] ≈ WignerD.clebschgordan(1,-1,1,1,0,0) ≈ 1/√3
+		@test CG[1] ≈ WignerD.clebschgordan(1,-1,1,1,1,0) ≈ -1/√2
+		@test CG[2] ≈ WignerD.clebschgordan(1,-1,1,1,2,0) ≈ 1/√6
+
+		CG = WignerD.CG_ℓ₁mℓ₂nst(1,0,1)
+
+		@test CG[0] ≈ WignerD.clebschgordan(1,0,1,0,0,0) ≈ -1/√3
+		@test CG[1] ≈ WignerD.clebschgordan(1,0,1,0,1,0) ≈ 0
+		@test CG[2] ≈ WignerD.clebschgordan(1,0,1,0,2,0) ≈ √(2/3)
+	end
+	@testset "non-allocating" begin
+		CG = zeros(0:2)
+		w3j = zeros(3)
+		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG,w3j)
+
+		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
+		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
+		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
+
+		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG)
+
+		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
+		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
+		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6		
+	end
 end
 
 @testset "Ylm0" begin
@@ -43,6 +66,14 @@ end
 	@test Ylmatrix(1,n,n_range=0:0) ≈ OffsetArray(reshape([√(3/8π)*sin(n.θ)cis(-n.ϕ),
 										√(3/4π)cos(n.θ),
 										-√(3/8π)*sin(n.θ)cis(n.ϕ)],3,1),-1:1,0:0)
+end
+
+@testset "Ylmatrix OSH and GSH" begin
+	ℓ = rand(1:10)
+	n = Point2D(π/2,0)
+	Y1 = Ylmatrix(GSH(),ℓ,n)
+	Y2 = Ylmatrix(OSH(),ℓ,n)
+	@test Y1[:,0] ≈ Y2[:,0]
 end
 
 @testset "Y1100 explicit" begin
@@ -100,4 +131,27 @@ end
 	b_st = BiPoSH(ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0)
 	b_s0 = BiPoSH_s0(ℓ,ℓ,0:2ℓ,0,0,n1,n2)
 	@test parent(parent(b_st)) ≈ parent(b_s0)
+end
+
+@testset "BiPoSH OSH and GSH" begin
+	n1 = Point2D(π/2,0)
+	n2 = Point2D(π/2,π/3)
+	SHModes = st(0,1,0,0)
+    B_GSH=BiPoSH(GSH(),2,2,SHModes,n1,n2)
+    B_OSH=BiPoSH(OSH(),2,2,SHModes,n1,n2)
+    @test B_GSH[:,0,0] ≈ B_OSH[:,0,0]
+end
+
+@testset "BiPoSH multiple ℓ's" begin
+	n1 = Point2D(π/2,0)
+	n2 = Point2D(π/2,π/3)
+	SHModes = st(0,1,0,0)
+	ℓ_range = 1:10
+	ℓ′ℓ = s′s(ℓ_range,SHModes)
+    B_all = BiPoSH(OSH(),ℓ_range,SHModes,n1,n2)
+
+    for (ℓ′,ℓ) in ℓ′ℓ
+    	B = BiPoSH(OSH(),ℓ,ℓ′,SHModes,n1,n2)
+    	@test B_all[:,modeindex(ℓ′ℓ,(ℓ′,ℓ))] ≈ B[:,0,0]
+    end
 end

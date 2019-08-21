@@ -108,10 +108,9 @@ uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.2"
 
 [[OffsetArrays]]
-deps = ["DelimitedFiles", "Test"]
-git-tree-sha1 = "e6893807f09c1d5517861ded8b203cb96cb7d44a"
+git-tree-sha1 = "1af2f79c7eaac3e019a0de41ef63335ff26a0a57"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "0.10.0"
+version = "0.11.1"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -166,15 +165,15 @@ uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "0.7.2"
 
 [[SphericalHarmonicModes]]
-git-tree-sha1 = "d465de36e855829ad8e99d0f4a47e08a57ca5d71"
+git-tree-sha1 = "646a8da475c79af5ca95537e61f2fbea0cc9dd6f"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicModes.jl.git"
 uuid = "0e9554e2-b38b-11e9-16d7-9d9abfec665a"
-version = "0.1.4"
+version = "0.2.0"
 
 [[SphericalHarmonics]]
 deps = ["LinearAlgebra", "StaticArrays"]
-git-tree-sha1 = "b555b1fec6653c3a0d0924d5021f91aa7f1655c7"
+git-tree-sha1 = "3aa78aa8d74c3f02488d9508656e48c027af3b42"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonics.jl.git"
 uuid = "c489a379-e885-57ff-9236-bd896d33c250"
