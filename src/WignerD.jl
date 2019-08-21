@@ -199,9 +199,12 @@ djmatrix(j,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ;kwargs...)
 djmatrix(j,m,n,θ::Real;kwargs...) = djmatrix(j,θ,m_range=m:m,n_range=n:n;kwargs...)
 djmatrix(j,m,n,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
 
-djmatrix!(dj::AbstractMatrix{<:Real},j,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ;kwargs...)
-djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,θ::Real;kwargs...) = djmatrix!(dj,j,θ,m_range=m:m,n_range=n:n;kwargs...)
-djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,x::SphericalPoint;kwargs...) = djmatrix!(dj,j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,x::SphericalPoint,args...;kwargs...) = 
+	djmatrix!(dj,j,x.θ,args...;kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,θ::Real,args...;kwargs...) = 
+	djmatrix!(dj,j,θ,args...;m_range=m:m,n_range=n:n,kwargs...)
+djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,x::SphericalPoint,args...;kwargs...) = 
+	djmatrix!(dj,j,x.θ,args...;m_range=m:m,n_range=n:n,kwargs...)
 
 ##########################################################################
 # Generalized spherical harmonics
@@ -558,7 +561,7 @@ BiPoSH_s0(ℓ₁,ℓ₂,s,
 
 # Any t
 
-struct BSH{T,AA<:AbstractArray{ComplexF64,3}} <: AbstractArray{ComplexF64,3}
+struct BSH{T<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{ComplexF64,N}
 	modes :: T
 	parent :: AA
 end
@@ -595,13 +598,8 @@ Base.similar(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(s_range(b),t_range(b),ax
 Base.copy(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(modes(b),copy(parent(b)))
 
 modes(b::BSH) = b.modes
-modeindex(b::BSH,s::Integer,t::Integer) = modeindex(modes(b),s,t)
-modeindex(b::BSH,::Colon,t::Integer) = 
-	[modeindex(modes(b),s,t)  for s in s_valid_range(b,t)]
 
-modeindex(b::BSH,s::Integer,::Colon) = 
-	[modeindex(modes(b),s,t)  for t in t_valid_range(b,s)]
-
+modeindex(b::BSH,s,t) = modeindex(modes(b),s,t)
 modeindex(b::BSH,::Colon,::Colon) = axes(parent(b),1)
 
 s_range(b::BSH) = s_range(modes(b))
@@ -614,26 +612,33 @@ Base.size(b::BSH,d) = size(parent(b),d)
 Base.axes(b::BSH) = axes(parent(b))
 Base.axes(b::BSH,d) = axes(parent(b),d)
 
+Base.view(b::BSH,args...) = BSH(modes(b),view(parent(b),args...))
+Base.view(b::BSH{T,1},s,t) where {T<:SHModeRange} = 
+	BSH(modes(b),view(parent(b),modeindex(b,s,t)))
+
 function Base.getindex(b::BSH,s::Integer,t::Integer,args...)
 	stind = modeindex(b,s,t)
-	@inbounds ret=parent(b)[stind,args...]
-	ret
+	parent(b)[stind,args...]
 end
 
-function Base.getindex(b::BSH,::Colon,args...)
-	@inbounds parent(b)[:,args...]
-end
+# This method is necessary in case we are using 1D views for a constant t
+Base.getindex(b::BSH{st,1},s::Integer) = parent(b)[s]
+# This method is necessary in case we are using 1D views for a constant s
+Base.getindex(b::BSH{ts,1},t::Integer) = parent(b)[t]
+
+Base.getindex(b::BSH,::Colon,args...) = parent(b)[:,args...]
 
 function Base.setindex!(b::BSH,x,s::Integer,t::Integer,args...)
 	stind = modeindex(b,s,t)
-	@inbounds parent(b)[stind,args...] = x
-	x
+	parent(b)[stind,args...] = x
 end
 
-function Base.setindex!(b::BSH,x,::Colon,args...)
-	@inbounds parent(b)[:,args...] = x
-	x
-end
+Base.setindex!(b::BSH,x,::Colon,args...) = parent(b)[:,args...] = x
+
+# This method is necessary in case we are using 1D views for a constant t
+Base.setindex!(b::BSH{st,1},x,s::Integer) = parent(b)[s] = x
+# This method is necessary in case we are using 1D views for a constant s
+Base.setindex!(b::BSH{ts,1},x,t::Integer) = parent(b)[t] = x
 
 Base.fill!(b::BSH,x) = fill!(parent(b),x)
 
@@ -990,19 +995,32 @@ function BiPoSH_compute!(ASH::AbstractSH,Y_BSH::BSH{st},ℓ₁::Integer,ℓ₂::
 		CG = zeros(abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂)
 	end
 
-	@inbounds for γ in γ_valid,β in β_valid, t in t_valid, m in -ℓ₁:ℓ₁
+	@inbounds for γ in γ_valid
+		Y2γ = @view Y_ℓ₂[:,γ]
+		@inbounds for β in β_valid
+			Y1β = @view Y_ℓ₁[:,β]
+			Yv = view(Y_BSH,:,β,γ)
+			@inbounds for t in t_valid
+				Yvt = view(Yv,:,t)
+				srange_t = s_valid_range(Y_BSH,t)
+				srange_loop = intersect(srange_t,s_valid)
+				@inbounds for m in -ℓ₁:ℓ₁
 		
-		n = t - m
-		if abs(n) > ℓ₂
-			continue
-		end
+					n = t - m
+					if abs(n) > ℓ₂
+						continue
+					end
 
-		CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+					CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
-		Y1Y2 = Y_ℓ₁[m,β]*Y_ℓ₂[n,γ]
+					Y1Y2 = Y1β[m]*Y2γ[n]
 
-		@inbounds for s in intersect(s_valid_range(Y_BSH,t),s_valid)
-			Y_BSH[s,t,β,γ] += CG[s]*Y1Y2
+					@inbounds for s in srange_loop
+						s_ind = searchsortedfirst(srange_t,s)
+						Yvt[s_ind] += CG[s]*Y1Y2
+					end
+				end
+			end
 		end
 	end
 
