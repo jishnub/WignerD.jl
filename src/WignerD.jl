@@ -268,8 +268,8 @@ function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Re
 	return Y
 end
 
-function YSH_loop!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
-	l::Integer,m_range::AbstractUnitRange)
+function YSH_fill!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
+	l::Integer,m_range::AbstractUnitRange=axes(Y,1))
 
 	@inbounds for m in m_range
 		Y[m,0] = YSH[index_y(l,m)]
@@ -296,20 +296,22 @@ end
 function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
 	YSH::AbstractVector{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
-	P::Vector{<:Real};kwargs...)
+	P::Vector{<:Real},Pcoeff=nothing;kwargs...)
 
 	m_range = get_m_n_ranges(l,OSHindices();kwargs...) |> first
 
 	if get(kwargs,:compute_Pl,false)
-		coeff = SphericalHarmonics.compute_coefficients(l)
-		compute_p!(l,cos(θ),coeff,P)
+		if isnothing(Pcoeff)
+			Pcoeff = SphericalHarmonics.compute_coefficients(l)
+		end
+		compute_p!(l,cos(θ),Pcoeff,P)
 	end
 
 	if get(kwargs,:compute_Ylm,false)
 		compute_y!(l,ϕ,P,YSH)
 	end
 
-	YSH_loop!(Y,YSH,l,m_range)
+	YSH_fill!(Y,YSH,l,m_range)
 
 	return Y
 end
@@ -323,7 +325,7 @@ function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
 	if get(kwargs,:compute_Ylm,false)
 		compute_y!(l,cos(θ),ϕ,YSH)
 	end
-	YSH_loop!(Y,YSH,l,m_range)
+	YSH_fill!(Y,YSH,l,m_range)
 	return Y
 end
 
@@ -423,43 +425,43 @@ to_unitrange(a::AbstractUnitRange) = a
 # Only t=0
 function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,β::Integer,γ::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	Y_ℓ₁=zeros(0:-1,0:-1),Y_ℓ₂=zeros(0:-1,0:-1))
+	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 	# only t=0
-	if iszero(length(Y_ℓ₁)) 
-		Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₁n₁)) 
+		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
-	if iszero(length(Y_ℓ₂))
-		Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₂n₂))
+		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
 	m_max = min(ℓ₁,ℓ₂) ::Integer
 
-	Y_BSH = zeros(ComplexF64,s:s,β:β,γ:γ)
+	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s:s,β:β,γ:γ)
 
 	@inbounds for m in -m_max:m_max
-		Y_BSH[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Y_ℓ₁[m,β]*Y_ℓ₂[-m,γ]
+		Yℓ₁ℓ₂n₁n₂[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
 end
 
 function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};wig3j_fn_ptr=nothing,
-	Y_ℓ₁=zeros(0:-1,0:-1),Y_ℓ₂=zeros(0:-1,0:-1))
+	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 	# only t=0
 
-	if iszero(length(Y_ℓ₁)) 
-		Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₁n₁)) 
+		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
-	if iszero(length(Y_ℓ₂))
-		Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₂n₂))
+		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 	m_max = min(ℓ₁,ℓ₂)
 
 	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
 	s_intersection = intersect(s_range,s_valid_range)
 
-	Y_BSH = zeros(ComplexF64,s_intersection,β:β,γ:γ)
+	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,β:β,γ:γ)
 
 	lib = nothing
 
@@ -471,10 +473,10 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 	@inbounds for m in -m_max:m_max
 		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
 
-		s_intersection = intersect(axes(Y_BSH,1),axes(CG,1))
+		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 		
 		@inbounds for s in s_intersection
-			Y_BSH[s,β,γ] += CG[s]*Y_ℓ₁[m,β]*Y_ℓ₂[-m,γ]
+			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 		end
 	end
 
@@ -482,44 +484,44 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 		Libdl.dlclose(lib)
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
 end
 
 function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	Y_ℓ₁=zeros(0:-1,0:-1),Y_ℓ₂=zeros(0:-1,0:-1))
+	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 
 	# only t=0
-	if iszero(length(Y_ℓ₁))
-		Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₁n₁))
+		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
-	if iszero(length(Y_ℓ₂)) 
-		Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₂n₂)) 
+		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
 	m_max = min(ℓ₁,ℓ₂)
 
-	Y_BSH = zeros(ComplexF64,s:s,-1:1,-1:1)
+	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s:s,-1:1,-1:1)
 
-	@inbounds for (s,β,γ) in Iterators.product(axes(Y_BSH)...),m in -m_max:m_max
-		Y_BSH[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Y_ℓ₁[m,β]*Y_ℓ₂[-m,γ]
+	@inbounds for (s,β,γ) in Iterators.product(axes(Yℓ₁ℓ₂n₁n₂)...),m in -m_max:m_max
+		Yℓ₁ℓ₂n₁n₂[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
 end
 
 function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};wig3j_fn_ptr=nothing,
-	Y_ℓ₁=zeros(0:-1,0:-1),Y_ℓ₂=zeros(0:-1,0:-1))
+	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 
-	if iszero(length(Y_ℓ₁))
-		Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₁n₁))
+		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
-	if iszero(length(Y_ℓ₂)) 
-		Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+	if iszero(length(Yℓ₂n₂)) 
+		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	m_max = min(ℓ₁,ℓ₂)
@@ -527,7 +529,7 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
 	s_intersection = intersect(s_valid_range,s_range)
 
-	Y_BSH = zeros(ComplexF64,s_intersection,-1:1,-1:1)
+	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,-1:1,-1:1)
 
 	lib = nothing
 
@@ -539,10 +541,10 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 	@inbounds  for m in -m_max:m_max
 		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
 
-		s_intersection = intersect(axes(Y_BSH,1),axes(CG,1))
+		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 
-		@inbounds for (s,β,γ) in Iterators.product(s_intersection,axes(Y_BSH)[2:3]...)
-			Y_BSH[s,β,γ] += CG[s]*Y_ℓ₁[m,β]*Y_ℓ₂[-m,γ]
+		@inbounds for (s,β,γ) in Iterators.product(s_intersection,axes(Yℓ₁ℓ₂n₁n₂)[2:3]...)
+			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 		end
 	end
 
@@ -550,14 +552,15 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 		Libdl.dlclose(lib)
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
 end
 
 BiPoSH_s0(ℓ₁,ℓ₂,s,β::Integer,γ::Integer,
-	x::SphericalPoint,x2::SphericalPoint;kwargs...) = BiPoSH_s0(ℓ₁,ℓ₂,s,β,γ,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
+	x::SphericalPoint,x2::SphericalPoint;kwargs...) = 
+	BiPoSH_s0(ℓ₁,ℓ₂,s,β,γ,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
 
-BiPoSH_s0(ℓ₁,ℓ₂,s,
-	x::SphericalPoint,x2::SphericalPoint;kwargs...) = BiPoSH_s0(ℓ₁,ℓ₂,s,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
+BiPoSH_s0(ℓ₁,ℓ₂,s,x::SphericalPoint,x2::SphericalPoint;kwargs...) = 
+	BiPoSH_s0(ℓ₁,ℓ₂,s,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
 
 # Any t
 
@@ -664,12 +667,20 @@ function Base.show(io::IO, ::MIME"text/plain", b::BSH)
     show(io, b)  
 end
 
+# BiPoSH Yℓ₁ℓ₂st(n₁,n₂)
+
+# Fall back to the generalized SH by default
+BiPoSH(args...;kwargs...) = BiPoSH(GSH(),args...;kwargs...)
+BiPoSH!(args...;kwargs...) = BiPoSH!(GSH(),args...;kwargs...)
+
+# methods for ordinary and generalized spherical harmonics
+
 function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
 	β::Integer,γ::Integer)
 
-	Y_BSH = BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(θ₁,ϕ₁),(θ₂,ϕ₂),β:β,γ:γ)
-	Y_BSH[s,t,β,γ]
+	Yℓ₁ℓ₂n₁n₂ = BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(θ₁,ϕ₁),(θ₂,ϕ₂),β:β,γ:γ)
+	Yℓ₁ℓ₂n₁n₂[s,t,β,γ]
 end
 
 function BiPoSH(::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
@@ -678,12 +689,12 @@ function BiPoSH(::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integ
 	β_range::AbstractUnitRange=-1:1,
 	γ_range::AbstractUnitRange=-1:1)
 	
-	Y_ℓ₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β_range)
-	Y_ℓ₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ_range)
+	Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β_range)
+	Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ_range)
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
-	Y_BSH = BSH{st}(s:s,t:t,β_range,γ_range)
+	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β_range,γ_range)
 
 	for γ in γ_range,β in β_range
 		for m in -ℓ₁:ℓ₁
@@ -691,16 +702,27 @@ function BiPoSH(::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integ
 			if abs(n)>ℓ₂
 				continue
 			end
-			Y_BSH[s,t,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,n,s,t)*Y_ℓ₁[m,β]*Y_ℓ₂[n,γ]
+			Yℓ₁ℓ₂n₁n₂[s,t,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,n,s,t)*Yℓ₁n₁[m,β]*Yℓ₂n₂[n,γ]
 		end
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
+end
+
+BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
+	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+
+function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
+	args...;t = -maximum(s_range):maximum(s_range),kwargs...)
+
+	SHModes = st(s_range,t)
+	BiPoSH(ASH,ℓ₁,ℓ₂,SHModes,args...;kwargs...)
 end
 
 function BiPoSH(::GSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},args...;
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},args...;
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	kwargs...)
@@ -709,44 +731,44 @@ function BiPoSH(::GSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
 
 	if (β==0:0) && (γ==0:0)
 		# Fall back to the faster ordinary BSH
-		BiPoSH(OSH(),ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),args...;kwargs...)
+		BiPoSH(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,args...;kwargs...)
 	end
 
-	Y_ℓ₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
-	Y_ℓ₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
+	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
+	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 
-	BiPoSH!(GSH(),ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂;
-		β=β,γ=γ,kwargs...,compute_Yℓ₁=true,compute_Yℓ₂=true)
+	BiPoSH!(GSH(),ℓ₁,ℓ₂,SHModes,x1,x2,Yℓ₁n₁,Yℓ₂n₂,args...;
+		β=β,γ=γ,kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
 function BiPoSH(::OSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},args...;
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},args...;
 	kwargs...)
 
-	Y_ℓ₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,0:0)
-	Y_ℓ₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,0:0)
+	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,0:0)
+	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,0:0)
 
-	YSH_n1 = compute_y(ℓ₁,cos(θ₁),ϕ₁)
-	YSH_n2 = compute_y(ℓ₂,cos(θ₂),ϕ₂)
-
-	for m₁ in axes(Y_ℓ₁,1)
-		Y_ℓ₁[m₁,0] = YSH_n1[index_y(ℓ₁,m₁)]
-	end
-
-	for m₂ in axes(Y_ℓ₂,1)
-		Y_ℓ₂[m₂,0] = YSH_n2[index_y(ℓ₂,m₂)]
-	end
-
-	BiPoSH!(OSH(),ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂;
-		kwargs...,compute_Yℓ₁=false,compute_Yℓ₂=false,β=0:0,γ=0:0)
+	BiPoSH!(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,Yℓ₁n₁,Yℓ₂n₂,args...;
+		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,β=0:0,γ=0:0)
 end
 
-function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	args...;t = -maximum(s_range):maximum(s_range),kwargs...)
+function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	args...;kwargs...)
 
-	SHModes = st(s_range,t)
-	BiPoSH(ASH,ℓ₁,ℓ₂,SHModes,args...;kwargs...)
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
+	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
+
+	lmax = maximum(ℓ_range)
+	l′max = last(ℓ′ℓ_smax) |> first
+
+	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
+	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
+
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
+		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
 function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
@@ -759,7 +781,7 @@ end
 function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁,Y_ℓ₂,args...;
+	Yℓ₁n₁,Yℓ₂n₂,args...;
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	kwargs...)
@@ -767,7 +789,7 @@ function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHMode
 	β,γ = to_unitrange.((β,γ))
 
 	BiPoSH_compute!(ASH,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Y_ℓ₁,Y_ℓ₂,β,γ,args...;kwargs...)
+		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
 end
 
 function BiPoSH!(ASH::AbstractSH,B::BSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
@@ -780,7 +802,7 @@ end
 function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHModes::T,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁,Y_ℓ₂,args...;
+	Yℓ₁n₁,Yℓ₂n₂,args...;
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	kwargs...) where {T<:SHModeRange}
@@ -788,20 +810,8 @@ function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHMod
 	β,γ = to_unitrange.((β,γ))
 
 	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Y_ℓ₁,Y_ℓ₂,β,γ,args...;kwargs...)
+		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
 end
-
-BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH(ASH,ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH(ASH,ℓ₁,ℓ₂,SHModes,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
 BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
@@ -819,30 +829,47 @@ BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHModes::T,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) where {T<:SHModeRange} = 
 	BiPoSH!(ASH,B,ℓ₁,ℓ₂,SHModes,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
-# Compute BiPoSH for a range of ℓ's, assuming β=γ=0
-function BiPoSH!(::OSH,Yn1n2::Matrix{ComplexF64},
-	Y_l::AbstractMatrix{<:Complex},
-	Y_l′::AbstractMatrix{<:Complex},
-	l::AbstractUnitRange,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
+	Yℓ′n₁::AbstractMatrix{<:Complex},
+	Yℓn₂::AbstractMatrix{<:Complex},
+	YSH_n1=nothing,YSH_n2=nothing,
+	P=nothing,coeff=nothing;
 	CG=nothing,w3j=nothing,
-	wig3j_fn_ptr=nothing)
+	wig3j_fn_ptr=nothing,
+	compute_Yℓ₁n₁=false,compute_Yℓ₂n₂=false)
 	
-	ℓ′ℓ_smax = s′s(l,SHModes)
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
 
-	lmax = maximum(l)
+	lmax = maximum(ℓ_range)
 	l′max = last(ℓ′ℓ_smax) |> first
 
-	# Precompute the spherical harmonics
-	coeff = SphericalHarmonics.compute_coefficients(l′max)
-	P = SphericalHarmonics.allocate_p(l′max)
-	compute_p!(lmax,cos(θ₁),coeff,P)
-	YSH_n1 = SphericalHarmonics.allocate_y(lmax)
-	compute_y!(lmax,ϕ₁,P,YSH_n1)
+	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
+		# Precompute the spherical harmonics
+		if isnothing(coeff)
+			coeff = SphericalHarmonics.compute_coefficients(l′max)
+		end
+		if isnothing(P)
+			P = SphericalHarmonics.allocate_p(l′max)
+		end
 
-	compute_p!(l′max,cos(θ₂),coeff,P)
-	YSH_n2 = SphericalHarmonics.allocate_y(l′max)
-	compute_y!(l′max,ϕ₂,P,YSH_n2)
+		if compute_Yℓ₁n₁
+			compute_p!(l′max,cos(θ₁),coeff,P)
+			if isnothing(YSH_n1)
+				YSH_n1 = SphericalHarmonics.allocate_y(l′max)
+			end
+			compute_y!(l′max,ϕ₁,P,YSH_n1)
+		end
+
+		if compute_Yℓ₂n₂
+			compute_p!(lmax,cos(θ₂),coeff,P)
+			if isnothing(YSH_n2)
+				YSH_n2 = SphericalHarmonics.allocate_y(lmax)
+			end
+			compute_y!(lmax,ϕ₂,P,YSH_n2)
+		end
+	end
 
 	lib = nothing
 
@@ -858,56 +885,38 @@ function BiPoSH!(::OSH,Yn1n2::Matrix{ComplexF64},
 		CG = zeros(0:lmax+l′max)
 	end
 
-	@inbounds for (ind,(l′,l)) in enumerate(ℓ′ℓ_smax)
+	@inbounds for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		outputarr = OffsetArray(reshape(
-					view(Yn1n2,:,ind),axes(SHModes,1),1,1),
+					view(Yℓ′n₁ℓn₂,:,ind),axes(SHModes,1),1,1),
 						axes(SHModes,1),0:0,0:0)
 
-		Y_BSH = BSH(SHModes,outputarr)
-
-		BiPoSH!(OSH(),Y_BSH,l,l′,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-			Y_l,Y_l′,YSH_n1,YSH_n2;
+		BiPoSH!(OSH(),BSH(SHModes,outputarr),
+			ℓ′,ℓ,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
+			Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
 			CG=CG,w3j=w3j,β=0:0,γ=0:0,
 			wig3j_fn_ptr=wig3j_fn_ptr)
 	end
 
 	!isnothing(lib) && Libdl.dlclose(lib)
 
-	return Yn1n2
+	return Yℓ′n₁ℓn₂
 end
 
-function BiPoSH(::OSH,l::AbstractUnitRange,SHModes::SHModeRange,
-	args...;kwargs...)
-
-	ℓ′ℓ_smax = s′s(l,SHModes.smax)
-	Yn1n2 = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
-
-	lmax = maximum(l)
-	l′max = last(ℓ′ℓ_smax) |> first
-
-	Y_l = zeros(ComplexF64,-lmax:lmax,0:0)
-	Y_l′ = zeros(ComplexF64,-l′max:l′max,0:0)
-
-	BiPoSH!(OSH(),Yn1n2,Y_l,Y_l′,l,SHModes,args...;kwargs...)
-end
-
-BiPoSH!(::OSH,Yn1n2::Matrix{ComplexF64},Y_l,Y_l′,
-	l::AbstractUnitRange,SHModes::SHModeRange,
+BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) =
-	BiPoSH!(OSH(),Yn1n2,Y_l,Y_l′,l,SHModes,
+	
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,
 		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
-# Fall back to the generalized SH by default
-BiPoSH(args...;kwargs...) = BiPoSH(GSH(),args...;kwargs...)
-BiPoSH!(args...;kwargs...) = BiPoSH!(GSH(),args...;kwargs...)
-
 # The actual functions that do the calculation
+# BiPoSH Yℓ₁ℓ₂st(n₁,n₂)
 
 function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁::AbstractArray,Y_ℓ₂::AbstractArray,
+	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
 	β::AbstractUnitRange=-1:1,
 	γ::AbstractUnitRange=-1:1,
 	t_range::AbstractUnitRange=-last(s_range):last(s_range),
@@ -917,23 +926,23 @@ function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range
 	s_range = intersect(s_ℓ₁ℓ₂,s_range)
 	t_range = intersect(-maximum(s_range):maximum(s_range),t_range)
 
-	Y_BSH = BSH{st}(s_range,t_range,β=β,γ=γ)
+	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s_range,t_range,β=β,γ=γ)
 
-	BiPoSH_compute!(ASH,Y_BSH,ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,
+	BiPoSH_compute!(ASH,Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,
 		β,γ,t_range,args...;kwargs...)
 end
 
 function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁::AbstractArray,Y_ℓ₂::AbstractArray,
+	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
 	β::AbstractUnitRange=-1:1,
 	γ::AbstractUnitRange=-1:1,
 	args...;kwargs...)
 
 	B = BSH(SHModes,zeros(ComplexF64,axes(SHModes,1),β,γ))
 
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,
+	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,
 		β,γ,args...;kwargs...)
 end
 
@@ -941,45 +950,47 @@ function BiPoSH_compute!(ASH::AbstractSH,B::BSH{st},ℓ₁::Integer,ℓ₂::Inte
 	s::AbstractUnitRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁::AbstractArray,Y_ℓ₂::AbstractArray,
+	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
 	β::AbstractUnitRange=-1:1,
 	γ::AbstractUnitRange=-1:1,
 	t::AbstractUnitRange=-maximum(s):maximum(s),
 	args...;kwargs...)
 
 	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,st(s,t),
-	(θ₁,ϕ₁),(θ₂,ϕ₂),Y_ℓ₁,Y_ℓ₂,β,γ,args...;kwargs...)
+	(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
 end
 
-function BiPoSH_compute!(ASH::AbstractSH,Y_BSH::BSH{st},ℓ₁::Integer,ℓ₂::Integer,
+function BiPoSH_compute!(ASH::AbstractSH,
+	Yℓ₁ℓ₂n₁n₂::BSH{st},ℓ₁::Integer,ℓ₂::Integer,
 	stmodes::st,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
 	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Y_ℓ₁::AbstractMatrix{<:Complex},Y_ℓ₂::AbstractMatrix{<:Complex},
+	Yℓ₁n₁::AbstractMatrix{<:Complex},
+	Yℓ₂n₂::AbstractMatrix{<:Complex},
 	β::AbstractUnitRange=-1:1,
 	γ::AbstractUnitRange=-1:1,
 	dℓ₁::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
 	dℓ₂::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
 	CG=nothing,w3j=nothing,
 	compute_dℓ₁=false,compute_dℓ₂=false,
-	compute_Yℓ₁=true,compute_Yℓ₂=true,
+	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
 	wig3j_fn_ptr=nothing)
 
-	if compute_Yℓ₁
-		Ylmatrix!(ASH,Y_ℓ₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,
+	if compute_Yℓ₁n₁
+		Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,
 			compute_d_matrix= !isnothing(dℓ₁) && compute_dℓ₁)
 	end
-	if compute_Yℓ₂
-		Ylmatrix!(ASH,Y_ℓ₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
+	if compute_Yℓ₂n₂
+		Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
 			compute_d_matrix= !isnothing(dℓ₂) && compute_dℓ₂ && (dℓ₂ !== dℓ₁) )
 	end
 
 	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_valid = intersect(s_ℓ₁ℓ₂,s_range(stmodes),s_range(Y_BSH))
+	s_valid = intersect(s_ℓ₁ℓ₂,s_range(stmodes),s_range(Yℓ₁ℓ₂n₁n₂))
 	t_valid = intersect(-maximum(s_valid):maximum(s_valid),
-		t_range(stmodes),t_range(Y_BSH))
-	β_valid = intersect(β,axes(parent(Y_BSH),2))
-	γ_valid = intersect(γ,axes(parent(Y_BSH),3))
+		t_range(stmodes),t_range(Yℓ₁ℓ₂n₁n₂))
+	β_valid = intersect(β,axes(parent(Yℓ₁ℓ₂n₁n₂),2))
+	γ_valid = intersect(γ,axes(parent(Yℓ₁ℓ₂n₁n₂),3))
 
 	lib = nothing
 
@@ -996,14 +1007,22 @@ function BiPoSH_compute!(ASH::AbstractSH,Y_BSH::BSH{st},ℓ₁::Integer,ℓ₂::
 	end
 
 	@inbounds for γ in γ_valid
-		Y2γ = @view Y_ℓ₂[:,γ]
+		
+		Yℓ₂n₂γ = @view Yℓ₂n₂[:,γ]
+
 		@inbounds for β in β_valid
-			Y1β = @view Y_ℓ₁[:,β]
-			Yv = view(Y_BSH,:,β,γ)
+			
+			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
+			
+			Yℓ₁ℓ₂n₁n₂βγ = view(Yℓ₁ℓ₂n₁n₂,:,β,γ)
+			
 			@inbounds for t in t_valid
-				Yvt = view(Yv,:,t)
-				srange_t = s_valid_range(Y_BSH,t)
-				srange_loop = intersect(srange_t,s_valid)
+				
+				Yℓ₁ℓ₂n₁n₂βγt = view(Yℓ₁ℓ₂n₁n₂βγ,:,t)
+				
+				srange_t = s_valid_range(Yℓ₁ℓ₂n₁n₂,t)
+				srange_t_valid = intersect(srange_t,s_valid)
+				
 				@inbounds for m in -ℓ₁:ℓ₁
 		
 					n = t - m
@@ -1013,11 +1032,11 @@ function BiPoSH_compute!(ASH::AbstractSH,Y_BSH::BSH{st},ℓ₁::Integer,ℓ₂::
 
 					CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
-					Y1Y2 = Y1β[m]*Y2γ[n]
+					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m]*Yℓ₂n₂γ[n]
 
-					@inbounds for s in srange_loop
+					@inbounds for s in srange_t_valid
 						s_ind = searchsortedfirst(srange_t,s)
-						Yvt[s_ind] += CG[s]*Y1Y2
+						Yℓ₁ℓ₂n₁n₂βγt[s_ind] += CG[s]*Yℓ₁n₁βYℓ₂n₂γ
 					end
 				end
 			end
@@ -1028,7 +1047,7 @@ function BiPoSH_compute!(ASH::AbstractSH,Y_BSH::BSH{st},ℓ₁::Integer,ℓ₂::
 		Libdl.dlclose(lib)
 	end
 
-	return Y_BSH
+	return Yℓ₁ℓ₂n₁n₂
 end
 
 ##################################################################################################

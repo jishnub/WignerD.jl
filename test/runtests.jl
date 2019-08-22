@@ -151,7 +151,7 @@ end
     B_all = BiPoSH(OSH(),ℓ_range,SHModes,n1,n2)
 
     for (ℓ′,ℓ) in ℓ′ℓ
-    	B = BiPoSH(OSH(),ℓ,ℓ′,SHModes,n1,n2)
+    	B = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n1,n2)
     	@test B_all[:,modeindex(ℓ′ℓ,(ℓ′,ℓ))] ≈ B[:,0,0]
     end
 end
