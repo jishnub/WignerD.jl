@@ -165,11 +165,11 @@ uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
 version = "0.7.2"
 
 [[SphericalHarmonicModes]]
-git-tree-sha1 = "45e3da66bed09b869de0b3f4f0c6e375645f34d8"
+git-tree-sha1 = "f8c3963d9aa5f9471cc43b364465d9e15fee00c2"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicModes.jl.git"
 uuid = "0e9554e2-b38b-11e9-16d7-9d9abfec665a"
-version = "0.2.1"
+version = "0.3.1"
 
 [[SphericalHarmonics]]
 deps = ["LinearAlgebra", "StaticArrays"]

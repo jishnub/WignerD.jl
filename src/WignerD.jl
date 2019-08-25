@@ -7,7 +7,7 @@ import SphericalHarmonicModes: modeindex, s_valid_range, t_valid_range,
 s_range,t_range
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
-djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH!,BSH,Jy_eigen,
+djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH_n1n2_n2n1,BiPoSH!,BSH,Jy_eigen,
 st,ts,s′s,modes,modeindex,SphericalHarmonic,SphericalHarmonic!,st,ts,
 OSH,GSH
 
@@ -270,6 +270,14 @@ end
 
 function YSH_fill!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
 	l::Integer,m_range::AbstractUnitRange=axes(Y,1))
+
+	@assert(!isempty(intersect(m_range,axes(Y,1))),
+		"Y is not large enough to contain m range $m_range."*
+		" Axes of Y is $(axes(Y)) and l=$l, m=$m_range")
+
+	@assert(length(YSH)>=SphericalHarmonics.sizeY(l),
+		"YSH does not contain all (l,m)."*
+		"Axes of YSH is $(axes(YSH)) and l=$l, m=$m_range")
 
 	@inbounds for m in m_range
 		Y[m,0] = YSH[index_y(l,m)]
@@ -753,23 +761,7 @@ function BiPoSH(::OSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
 		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,β=0:0,γ=0:0)
 end
 
-function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	args...;kwargs...)
 
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
-	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
-
-	lmax = maximum(ℓ_range)
-	l′max = last(ℓ′ℓ_smax) |> first
-
-	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
-	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
-
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
-		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
-end
 
 function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
 	args...;t=-maximum(s_range):maximum(s_range),kwargs...)
@@ -813,6 +805,20 @@ function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHMod
 		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
 end
 
+function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
+	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
+	Yℓ₁n₁,Yℓ₂n₂,args...;
+	β::Union{Integer,AbstractUnitRange}=-1:1,
+	γ::Union{Integer,AbstractUnitRange}=-1:1,
+	kwargs...) where {T<:SHModeRange}
+
+	β,γ = to_unitrange.((β,γ))
+
+	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,modes(B),(θ₁,ϕ₁),(θ₂,ϕ₂),
+		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
+end
+
 BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
 	BiPoSH!(ASH,ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
@@ -829,6 +835,16 @@ BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHModes::T,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) where {T<:SHModeRange} = 
 	BiPoSH!(ASH,B,ℓ₁,ℓ₂,SHModes,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
+BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,
+	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) where {T<:SHModeRange} = 
+	BiPoSH!(ASH,B,ℓ₁,ℓ₂,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+
+"""
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,args...;kwargs...)
+
+	Compute BiPoSH for a range in ℓ and ℓ′
+"""
 function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
@@ -891,7 +907,8 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 					view(Yℓ′n₁ℓn₂,:,ind),axes(SHModes,1),1,1),
 						axes(SHModes,1),0:0,0:0)
 
-		BiPoSH!(OSH(),BSH(SHModes,outputarr),
+		B = BSH(SHModes,outputarr)
+		BiPoSH!(OSH(),B,
 			ℓ′,ℓ,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
 			Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
 			CG=CG,w3j=w3j,β=0:0,γ=0:0,
@@ -903,15 +920,195 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	return Yℓ′n₁ℓn₂
 end
 
-BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) =
+	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
 	
 	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,
 		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+end
 
-# The actual functions that do the calculation
-# BiPoSH Yℓ₁ℓ₂st(n₁,n₂)
+function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	args...;kwargs...)
+
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
+	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
+
+	lmax = maximum(ℓ_range)
+	l′max = last(ℓ′ℓ_smax) |> first
+
+	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
+	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
+
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
+		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+end
+
+"""
+
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,args...;kwargs...)
+
+	Compute BiPoSH for a range in ℓ and ℓ′ by switching the two points
+	Returns Yℓ′n₁ℓn₂ and Yℓ′n₂ℓn₁
+"""
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
+	Yℓ′n₁::AbstractMatrix{<:Complex},
+	Yℓn₂::AbstractMatrix{<:Complex},
+	Yℓ′n₂::AbstractMatrix{<:Complex},
+	Yℓn₁::AbstractMatrix{<:Complex},
+	YSH_n1=nothing,YSH_n2=nothing,
+	P=nothing,coeff=nothing;
+	CG=nothing,w3j=nothing,
+	wig3j_fn_ptr=nothing,
+	compute_Yℓ₁n₁=true,
+	compute_Yℓ₂n₂=true)
+	
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
+
+	lmax = maximum(ℓ_range)
+	l′max = last(ℓ′ℓ_smax) |> first
+
+	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
+		# Precompute the spherical harmonics
+		if isnothing(coeff)
+			coeff = SphericalHarmonics.compute_coefficients(l′max)
+		end
+		if isnothing(P)
+			P = SphericalHarmonics.allocate_p(l′max)
+		end
+
+		if compute_Yℓ₁n₁
+			compute_p!(l′max,cos(θ₁),coeff,P)
+			if isnothing(YSH_n1)
+				YSH_n1 = SphericalHarmonics.allocate_y(l′max)
+			end
+			compute_y!(l′max,ϕ₁,P,YSH_n1)
+		end
+
+		if compute_Yℓ₂n₂
+			compute_p!(l′max,cos(θ₂),coeff,P)
+			if isnothing(YSH_n2)
+				YSH_n2 = SphericalHarmonics.allocate_y(l′max)
+			end
+			compute_y!(l′max,ϕ₂,P,YSH_n2)
+		end
+	end
+
+	lib = nothing
+
+	if isnothing(wig3j_fn_ptr)
+		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
+	end
+
+	if isnothing(w3j)
+		w3j = zeros(lmax+l′max+1)
+	end
+	if isnothing(CG)
+		CG = zeros(0:lmax+l′max)
+	end
+
+	@inbounds for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
+		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
+
+		Yℓ′n₁ℓn₂_st = OffsetArray(reshape(
+						view(Yℓ′n₁ℓn₂,:,indℓ′ℓ),axes(SHModes,1),1,1),
+							axes(SHModes,1),0:0,0:0)
+
+		Yℓ′n₂ℓn₁_st = OffsetArray(reshape(
+					view(Yℓ′n₂ℓn₁,:,indℓ′ℓ),axes(SHModes,1),1,1),
+						axes(SHModes,1),0:0,0:0)
+
+		# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
+		# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
+		# Precomputation of the RHS would have happened if ℓ′<ℓ, 
+		# as the modes are sorted in order of increasing ℓ
+
+		if (ℓ,ℓ′) in ℓ′ℓ_smax && ℓ′<ℓ
+			# In this case Yℓn₁ℓ′n₂ and Yℓn₂ℓ′n₁ have already been computed
+			# This means we can evaluate Yℓ′n₂ℓn₁ and Yℓ′n₁ℓn₂ using the formulae
+			# presented above
+
+			indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
+
+			Yℓn₁ℓ′n₂_st = OffsetArray(reshape(
+						view(Yℓ′n₁ℓn₂,:,indℓℓ′),axes(SHModes,1),1,1),
+							axes(SHModes,1),0:0,0:0)
+
+			Yℓn₂ℓ′n₁_st = OffsetArray(reshape(
+					view(Yℓ′n₂ℓn₁,:,indℓℓ′),axes(SHModes,1),1,1),
+						axes(SHModes,1),0:0,0:0)
+
+			for (indst,(s,t)) in enumerate(SHModes)
+				Yℓ′n₂ℓn₁_st[indst,0,0] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst,0,0]
+				Yℓ′n₁ℓn₂_st[indst,0,0] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst,0,0]
+			end
+
+		else
+			# Default case, where we need to evaluate both
+
+			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₂ℓn₁_st),
+				ℓ′,ℓ,(θ₂,ϕ₂),(θ₁,ϕ₁),
+				Yℓ′n₂,Yℓn₁,YSH_n2,YSH_n1;
+				CG=CG,w3j=w3j,β=0:0,γ=0:0,
+				wig3j_fn_ptr=wig3j_fn_ptr)
+
+			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₁ℓn₂_st),
+				ℓ′,ℓ,(θ₁,ϕ₁),(θ₂,ϕ₂),
+				Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
+				CG=CG,w3j=w3j,β=0:0,γ=0:0,
+				wig3j_fn_ptr=wig3j_fn_ptr)
+		end
+
+	end
+
+	!isnothing(lib) && Libdl.dlclose(lib)
+
+	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
+end
+
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+	Yℓ′n₂ℓn₁::Matrix{ComplexF64},
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
+	
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ_range,SHModes,
+		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+end
+
+function BiPoSH_n1n2_n2n1(ASH::AbstractSH,
+	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	args...;kwargs...)
+
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
+	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
+	Yℓ′n₂ℓn₁ = similar(Yℓ′n₁ℓn₂)
+	fill!(Yℓ′n₂ℓn₁,0)
+
+	lmax = maximum(ℓ_range)
+	l′max = last(ℓ′ℓ_smax) |> first
+
+	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
+	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
+
+	Yℓ′n₂ = similar(Yℓ′n₁); fill!(Yℓ′n₂,0)
+	Yℓn₁ = similar(Yℓn₂); fill(Yℓn₁,0)
+
+	BiPoSH!(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ_range,SHModes,
+		x1,x2,Yℓ′n₁,Yℓn₂,Yℓ′n₂,Yℓn₁,args...;
+		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+end
+
+# The actual functions that do the calculation for one pair of (ℓ₁,ℓ₂) and 
+# (θ₁,ϕ₁) and (θ₂,ϕ₂). The BiPoSH! functions call these.
 
 function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},

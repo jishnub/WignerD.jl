@@ -142,7 +142,7 @@ end
     @test B_GSH[:,0,0] ≈ B_OSH[:,0,0]
 end
 
-@testset "BiPoSH multiple ℓ's" begin
+@testset "BiPoSH ℓrange" begin
 	n1 = Point2D(π/2,0)
 	n2 = Point2D(π/2,π/3)
 	SHModes = st(0,1,0,0)
@@ -153,5 +153,21 @@ end
     for (ℓ′,ℓ) in ℓ′ℓ
     	B = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n1,n2)
     	@test B_all[:,modeindex(ℓ′ℓ,(ℓ′,ℓ))] ≈ B[:,0,0]
+    end
+end
+
+@testset "BiPoSH ℓrange 2pt" begin
+	n1 = Point2D(π/2,0);
+	n2 = Point2D(π/2,π/3);
+	SHModes = st(0,10);
+	ℓ_range = 1:10;
+	ℓ′ℓ = s′s(ℓ_range,SHModes);
+    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),ℓ_range,SHModes,n1,n2)
+
+    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n1,n2)
+    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n2,n1)
+    	@test Yℓ′n₁ℓn₂_all[:,ℓ′ℓind] ≈ Yℓ′n₁ℓn₂[:,0,0]
+    	@test Yℓ′n₂ℓn₁_all[:,ℓ′ℓind] ≈ Yℓ′n₂ℓn₁[:,0,0]
     end
 end
