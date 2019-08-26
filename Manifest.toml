@@ -75,7 +75,7 @@ uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[Legendre]]
 deps = ["HyperDualNumbers", "OffsetArrays"]
-git-tree-sha1 = "5365f8a32bd140fa68ec5074f21ab33d559bc07c"
+git-tree-sha1 = "75b194c997515cd2518ba10bd6e1d2088404692a"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/Legendre.jl.git"
 uuid = "3db4a2ba-fc88-11e8-3e01-49c72059a882"

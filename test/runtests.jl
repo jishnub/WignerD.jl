@@ -87,7 +87,7 @@ end
 	n2 = Point2D(π*rand(),2π*rand())
 	ℓmax = 20
 	Yℓℓ_00 = OffsetArray{ComplexF64}(undef,1:ℓmax)
-	P = Pl(cosχ(n1,n2),ℓmax=ℓmax)
+	P = Pl(cosχ(n1,n2),lmax=ℓmax)
 	
 	for ℓ in axes(Yℓℓ_00,1)
 		Yℓℓ_00[ℓ] = P[ℓ]*(-1)^ℓ * √(2ℓ+1)/4π
@@ -107,7 +107,7 @@ end
 	n2 = Point2D(π*rand(),2π*rand())
 	ℓmax = 20
 	Yℓℓ_10 = OffsetArray{ComplexF64}(undef,1:ℓmax)
-	dP = dPl(cosχ(n1,n2),ℓmax=ℓmax)
+	dP = dPl(cosχ(n1,n2),lmax=ℓmax)
 	
 	for ℓ in axes(Yℓℓ_10,1)
 		Yℓℓ_10[ℓ] = dP[ℓ]*im*(-1)^ℓ * √(3*(2ℓ+1)/(ℓ*(ℓ+1)))/4π * ∂ϕ₂cosχ(n1,n2)
