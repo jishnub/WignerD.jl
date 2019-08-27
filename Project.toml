@@ -14,9 +14,9 @@ TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"
 WignerSymbols = "9f57e263-0b3d-5e2e-b1be-24f2bb48858b"
 
 [extras]
-Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
+LegendrePolynomials = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"
 
 [targets]
-test = ["Legendre", "TwoPointFunctions", "Test"]
+test = ["LegendrePolynomials", "TwoPointFunctions", "Test"]
