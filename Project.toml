@@ -3,7 +3,7 @@ uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
 version = "0.2.0"
 
 [deps]
-Legendre = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
+LegendrePolynomials = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"

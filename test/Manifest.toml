@@ -73,11 +73,11 @@ version = "4.0.0"
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
-[[Legendre]]
+[[LegendrePolynomials]]
 deps = ["HyperDualNumbers", "OffsetArrays"]
-git-tree-sha1 = "75b194c997515cd2518ba10bd6e1d2088404692a"
+git-tree-sha1 = "e7d69dfdd543b91a4bde5e974b9691ba42b17cd6"
 repo-rev = "master"
-repo-url = "https://github.com/jishnub/Legendre.jl.git"
+repo-url = "https://github.com/jishnub/LegendrePolynomials.jl"
 uuid = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
 version = "0.1.0"
 

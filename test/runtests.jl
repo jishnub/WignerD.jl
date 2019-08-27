@@ -1,4 +1,4 @@
-using WignerD,PointsOnASphere,TwoPointFunctions,Legendre
+using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials
 using OffsetArrays
 using Test
 
