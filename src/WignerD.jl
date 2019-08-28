@@ -955,47 +955,46 @@ end
 	Returns Yℓ′n₁ℓn₂ and Yℓ′n₂ℓn₁
 """
 function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
 	Yℓ′n₁::AbstractMatrix{<:Complex},
-	Yℓn₂::AbstractMatrix{<:Complex},
-	Yℓ′n₂::AbstractMatrix{<:Complex},
 	Yℓn₁::AbstractMatrix{<:Complex},
+	Yℓ′n₂::AbstractMatrix{<:Complex},
+	Yℓn₂::AbstractMatrix{<:Complex},
 	YSH_n1=nothing,YSH_n2=nothing,
 	P=nothing,coeff=nothing;
 	CG=nothing,w3j=nothing,
 	wig3j_fn_ptr=nothing,
 	compute_Yℓ₁n₁=true,
 	compute_Yℓ₂n₂=true)
-	
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
 
-	lmax = maximum(ℓ_range)
-	l′max = last(ℓ′ℓ_smax) |> first
+	lmax = maximum(s_range(ℓ′ℓ_smax))
+	l′max = maximum(s′_range(ℓ′ℓ_smax))
+	l_highest = max(l′max,lmax)
 
 	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
 		# Precompute the spherical harmonics
 		if isnothing(coeff)
-			coeff = SphericalHarmonics.compute_coefficients(l′max)
+			coeff = SphericalHarmonics.compute_coefficients(l_highest)
 		end
 		if isnothing(P)
-			P = SphericalHarmonics.allocate_p(l′max)
+			P = SphericalHarmonics.allocate_p(l_highest)
 		end
 
 		if compute_Yℓ₁n₁
-			compute_p!(l′max,cos(θ₁),coeff,P)
+			compute_p!(l_highest,cos(θ₁),coeff,P)
 			if isnothing(YSH_n1)
-				YSH_n1 = SphericalHarmonics.allocate_y(l′max)
+				YSH_n1 = SphericalHarmonics.allocate_y(l_highest)
 			end
-			compute_y!(l′max,ϕ₁,P,YSH_n1)
+			compute_y!(l_highest,ϕ₁,P,YSH_n1)
 		end
 
 		if compute_Yℓ₂n₂
-			compute_p!(l′max,cos(θ₂),coeff,P)
+			compute_p!(l_highest,cos(θ₂),coeff,P)
 			if isnothing(YSH_n2)
-				YSH_n2 = SphericalHarmonics.allocate_y(l′max)
+				YSH_n2 = SphericalHarmonics.allocate_y(l_highest)
 			end
-			compute_y!(l′max,ϕ₂,P,YSH_n2)
+			compute_y!(l_highest,ϕ₂,P,YSH_n2)
 		end
 	end
 
@@ -1073,28 +1072,33 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
 
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	Yℓ′n₂ℓn₁::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
+	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
 	
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ_range,SHModes,
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax,SHModes,
 		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 end
 
-function BiPoSH_n1n2_n2n1(ASH::AbstractSH,
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+function BiPoSH_n1n2_n2n1(ASH::AbstractSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
 	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
 	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
 	args...;kwargs...)
 
 	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
-	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
-	Yℓ′n₂ℓn₁ = similar(Yℓ′n₁ℓn₂)
-	fill!(Yℓ′n₂ℓn₁,0)
+	BiPoSH_n1n2_n2n1(ASH,ℓ′ℓ_smax,SHModes,x1,x2,args...;kwargs...)
+end
 
-	lmax = maximum(ℓ_range)
-	l′max = last(ℓ′ℓ_smax) |> first
+function BiPoSH_n1n2_n2n1(ASH::AbstractSH,ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
+	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
+	args...;kwargs...)
+
+	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
+	Yℓ′n₂ℓn₁ = similar(Yℓ′n₁ℓn₂); fill!(Yℓ′n₂ℓn₁,0)
+
+	lmax = maximum(s_range(ℓ′ℓ_smax))
+	l′max = maximum(s′_range(ℓ′ℓ_smax))
 
 	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
 	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
@@ -1102,9 +1106,11 @@ function BiPoSH_n1n2_n2n1(ASH::AbstractSH,
 	Yℓ′n₂ = similar(Yℓ′n₁); fill!(Yℓ′n₂,0)
 	Yℓn₁ = similar(Yℓn₂); fill(Yℓn₁,0)
 
-	BiPoSH!(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ_range,SHModes,
-		x1,x2,Yℓ′n₁,Yℓn₂,Yℓ′n₂,Yℓn₁,args...;
+	BiPoSH!(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax,SHModes,
+		x1,x2,Yℓ′n₁,Yℓn₁,Yℓ′n₂,Yℓn₂,args...;
 		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+
+	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax
 end
 
 # The actual functions that do the calculation for one pair of (ℓ₁,ℓ₂) and 

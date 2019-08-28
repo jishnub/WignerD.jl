@@ -160,9 +160,25 @@ end
 	n1 = Point2D(π/2,0);
 	n2 = Point2D(π/2,π/3);
 	SHModes = st(0,10);
-	ℓ_range = 1:10;
+
+	ℓ_range = 0:10;
+	# All possible ℓ′
 	ℓ′ℓ = s′s(ℓ_range,SHModes);
-    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),ℓ_range,SHModes,n1,n2)
+    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),ℓ′ℓ,SHModes,n1,n2)
+    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),ℓ_range,SHModes,n1,n2)
+
+    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n1,n2)
+    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n2,n1)
+    	@test Yℓ′n₁ℓn₂_all[:,ℓ′ℓind] ≈ Yℓ′n₁ℓn₂[:,0,0]
+    	@test Yℓ′n₂ℓn₁_all[:,ℓ′ℓind] ≈ Yℓ′n₂ℓn₁[:,0,0]
+    	@test Yℓ′n₁ℓn₂_all_2[:,ℓ′ℓind] ≈ Yℓ′n₁ℓn₂[:,0,0]
+    	@test Yℓ′n₂ℓn₁_all_2[:,ℓ′ℓind] ≈ Yℓ′n₂ℓn₁[:,0,0]
+    end
+
+    # If all ℓ′ isn't included
+    ℓ′ℓ = s′s(ℓ_range,SHModes,3:5);
+    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),ℓ′ℓ,SHModes,n1,n2)
 
     for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
     	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),ℓ′,ℓ,SHModes,n1,n2)
