@@ -572,8 +572,8 @@ BiPoSH_s0(ℓ₁,ℓ₂,s,x::SphericalPoint,x2::SphericalPoint;kwargs...) =
 
 # Any t
 
-struct BSH{T<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{ComplexF64,N}
-	modes :: T
+struct BSH{TSH<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{ComplexF64,N}
+	modes :: TSH
 	parent :: AA
 end
 
@@ -846,7 +846,7 @@ BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,
 	Compute BiPoSH for a range in ℓ and ℓ′
 """
 function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
 	Yℓ′n₁::AbstractMatrix{<:Complex},
 	Yℓn₂::AbstractMatrix{<:Complex},
@@ -855,11 +855,9 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	CG=nothing,w3j=nothing,
 	wig3j_fn_ptr=nothing,
 	compute_Yℓ₁n₁=false,compute_Yℓ₂n₂=false)
-	
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
 
-	lmax = maximum(ℓ_range)
-	l′max = last(ℓ′ℓ_smax) |> first
+	lmax = maximum(s_range(ℓ′ℓ_smax))
+	l′max = maximum(s′_range(ℓ′ℓ_smax))
 
 	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
 		# Precompute the spherical harmonics
@@ -922,28 +920,42 @@ end
 
 function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	args...;kwargs...)
+
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ′ℓ_smax,SHModes,args...;kwargs...)
+end
+
+function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
+	ℓ_range,SHModes::SHModeRange,
 	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
 	
 	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,
 		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 end
 
-function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+function BiPoSH(::OSH,ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
 	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
 	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
 	args...;kwargs...)
 
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
 	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
 
-	lmax = maximum(ℓ_range)
-	l′max = last(ℓ′ℓ_smax) |> first
+	lmax = maximum(s_range(ℓ′ℓ_smax))
+	l′max = maximum(s′_range(ℓ′ℓ_smax))
 
 	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
 	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
 
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ′ℓ_smax,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
 		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+end
+
+function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
+	args...;kwargs...)
+
+	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
+	BiPoSH(OSH(),ℓ′ℓ_smax,SHModes,args...;kwargs...)
 end
 
 """
