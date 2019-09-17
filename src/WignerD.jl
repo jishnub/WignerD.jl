@@ -1205,6 +1205,8 @@ function BiPoSH_compute!(ASH::AbstractSH,
 			compute_d_matrix= !isnothing(dℓ₂) && compute_dℓ₂ && (dℓ₂ !== dℓ₁) )
 	end
 
+	fill!(Yℓ₁ℓ₂n₁n₂,zero(ComplexF64))
+
 	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
 	s_valid = intersect(s_ℓ₁ℓ₂,s_range(stmodes),s_range(Yℓ₁ℓ₂n₁n₂))
 	t_valid = intersect(-maximum(s_valid):maximum(s_valid),
