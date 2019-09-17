@@ -577,6 +577,14 @@ struct BSH{TSH<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{
 	parent :: AA
 end
 
+function BSH(st_iterator::SHModeRange,
+	β::Union{Integer,AbstractUnitRange}=-1:1,
+	γ::Union{Integer,AbstractUnitRange}=-1:1)
+
+	β,γ = to_unitrange.((β,γ))
+	BSH(st_iterator,zeros(ComplexF64,length(st_iterator),β,γ))
+end
+
 function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 	arr::AbstractArray{ComplexF64,3}) where {T<:SHModeRange}
 
@@ -585,13 +593,10 @@ function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
 end
 
 function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1) where {T<:SHModeRange}
-
-	β,γ = to_unitrange.((β,γ))
+	kwargs...) where {T<:SHModeRange}
 
 	st_iterator = T(smin,smax,tmin,tmax)
-	BSH(st_iterator,zeros(ComplexF64,length(st_iterator),β,γ))
+	BSH(st_iterator;kwargs...)
 end
 
 BSH{T}(s_range::AbstractUnitRange,t_range::AbstractUnitRange;kwargs...) where {T<:SHModeRange} = 
@@ -1187,7 +1192,7 @@ function BiPoSH_compute!(ASH::AbstractSH,
 	dℓ₁::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
 	dℓ₂::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
 	CG=nothing,w3j=nothing,
-	compute_dℓ₁=false,compute_dℓ₂=false,
+	compute_dℓ₁=true,compute_dℓ₂=true,
 	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
 	wig3j_fn_ptr=nothing)
 
