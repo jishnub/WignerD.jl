@@ -258,7 +258,7 @@ function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Re
 
 	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
 
-	if get(kwargs,:compute_d_matrix,false):: Bool
+	if get(kwargs,:compute_d_matrix,true):: Bool
 		djmatrix!(dj_θ,l,θ,args...;kwargs...,n_range=n_range)
 	end
 
