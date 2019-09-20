@@ -153,10 +153,18 @@ deps = ["LinearAlgebra", "Random"]
 uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[SpecialFunctions]]
-deps = ["BinDeps", "BinaryProvider", "Libdl", "Test"]
-git-tree-sha1 = "0b45dc2e45ed77f445617b99ff2adf0f5b0f23ea"
+deps = ["BinDeps", "BinaryProvider", "Libdl"]
+git-tree-sha1 = "3bdd374b6fd78faf0119b8c5d538788dbf910c6e"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "0.7.2"
+version = "0.8.0"
+
+[[SphericalHarmonics]]
+deps = ["LinearAlgebra", "StaticArrays"]
+git-tree-sha1 = "605d12f9ececced368eba6182f87438bfc673948"
+repo-rev = "master"
+repo-url = "https://github.com/jishnub/SphericalHarmonics.jl.git"
+uuid = "c489a379-e885-57ff-9236-bd896d33c250"
+version = "0.0.2"
 
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]

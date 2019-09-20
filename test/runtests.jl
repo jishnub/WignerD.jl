@@ -1,6 +1,5 @@
-using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials
-using OffsetArrays
-using Test
+using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials,
+OffsetArrays,SphericalHarmonics,Test
 
 @testset "d1_mn(θ)" begin
 	θ = π*rand()
@@ -63,7 +62,7 @@ end
 
 @testset "Ylm0" begin
 	n = Point2D(π*rand(),2π*rand())
-	@test Ylmatrix(1,n,n_range=0:0) ≈ OffsetArray(reshape([√(3/8π)*sin(n.θ)cis(-n.ϕ),
+	@test Ylmatrix(OSH(),1,n,n_range=0:0) ≈ OffsetArray(reshape([√(3/8π)*sin(n.θ)cis(-n.ϕ),
 										√(3/4π)cos(n.θ),
 										-√(3/8π)*sin(n.θ)cis(n.ϕ)],3,1),-1:1,0:0)
 end
@@ -85,7 +84,7 @@ end
 @testset "Yℓℓ_00" begin
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
-	ℓmax = 20
+	ℓmax = 100
 	Yℓℓ_00 = OffsetArray{ComplexF64}(undef,1:ℓmax)
 	P = Pl(cosχ(n1,n2),lmax=ℓmax)
 	
@@ -99,13 +98,12 @@ end
 	end
 	
 	@test Yℓℓ_00 ≈ YB_00
-	
 end
 
 @testset "Yℓℓ_10" begin
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
-	ℓmax = 20
+	ℓmax = 10
 	Yℓℓ_10 = OffsetArray{ComplexF64}(undef,1:ℓmax)
 	dP = dPl(cosχ(n1,n2),lmax=ℓmax)
 	
@@ -124,13 +122,52 @@ end
 	@test YB_10_n1n2 ≈ -YB_10_n2n1
 end
 
+@testset "BiPoSH_OSH_10" begin
+	n1 = Point2D(π*rand(),2π*rand());
+	n2 = Point2D(π*rand(),2π*rand());
+	ℓmax = 200;
+	Yℓℓ_10 = zeros(ComplexF64,1:ℓmax);
+	dP = dPl(cosχ(n1,n2),lmax=ℓmax);
+	
+	for ℓ in axes(Yℓℓ_10,1)
+		Yℓℓ_10[ℓ] = dP[ℓ]*im*(-1)^ℓ * √(3*(2ℓ+1)/(ℓ*(ℓ+1)))/4π * ∂ϕ₂cosχ(n1,n2)
+	end
+	
+	YB_10_n1n2 = zeros(ComplexF64,axes(Yℓℓ_10,1));
+	YB_10_n2n1 = zeros(ComplexF64,axes(Yℓℓ_10,1));
+
+	Yn1 = zeros(ComplexF64,-ℓmax:ℓmax,0:0);
+	Yn2 = zeros(ComplexF64,-ℓmax:ℓmax,0:0);
+
+	YSH1 = SphericalHarmonics.compute_y(ℓmax,cos(n1.θ),n1.ϕ);
+	YSH2 = SphericalHarmonics.compute_y(ℓmax,cos(n2.θ),n2.ϕ);
+
+	B = BSH(st(axes(Yℓℓ_10,1),0:0),β=0:0,γ=0:0);
+
+	for ℓ in axes(Yℓℓ_10,1)
+		
+		BiPoSH!(OSH(),B,ℓ,ℓ,n1,n2,Yn1,Yn2,YSH1,YSH2,
+			compute_Yℓ₁=false,compute_Yℓ₂=false);
+		
+		YB_10_n1n2[ℓ] = B[1,0,0,0]
+
+		BiPoSH!(OSH(),B,ℓ,ℓ,n2,n1,Yn2,Yn1,YSH2,YSH1,
+			compute_Yℓ₁=false,compute_Yℓ₂=false);
+
+		YB_10_n2n1[ℓ] = B[1,0,0,0]
+	end
+	
+	@test Yℓℓ_10 ≈ YB_10_n1n2
+	@test YB_10_n1n2 ≈ -YB_10_n2n1
+end
+
 @testset "BiPoSH t=0" begin
 	ℓ = rand(1:30)
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
-	b_st = BiPoSH(ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0)
+	b_GSH_st = BiPoSH(GSH(),ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0)
 	b_s0 = BiPoSH_s0(ℓ,ℓ,0:2ℓ,0,0,n1,n2)
-	@test parent(parent(b_st)) ≈ parent(b_s0)
+	@test parent(parent(b_GSH_st)) ≈ parent(b_s0)
 end
 
 @testset "BiPoSH OSH and GSH" begin

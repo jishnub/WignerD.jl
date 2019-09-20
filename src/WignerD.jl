@@ -219,38 +219,38 @@ struct OSH <: AbstractSH end # Ordinary SH
 Ylmatrix(args...;kwargs...) = Ylmatrix(GSH(),args...;kwargs...)
 Ylmatrix!(args...;kwargs...) = Ylmatrix!(GSH(),args...;kwargs...)
 
-function Ylmatrix(::GSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function Ylmatrix(T::GSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 
 	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
 
 	dj_θ = djmatrix(l,θ;kwargs...,n_range=n_range)
 	Y = zeros(ComplexF64,axes(dj_θ)...)
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
+	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
 end
 
-function Ylmatrix(::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 
 	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
 	m_range = axes(dj_θ,1)
 
 	Y = zeros(ComplexF64,m_range,n_range)
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,n_range=n_range,kwargs...)
+	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,n_range=n_range,kwargs...)
 end
 
-function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function Ylmatrix(T::OSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 	m_range,n_range = get_m_n_ranges(l,OSHindices();kwargs...)
 	Y = zeros(ComplexF64,m_range,n_range)
-	Ylmatrix!(OSH(),Y,l,(θ,ϕ);kwargs...)
+	Ylmatrix!(T,Y,l,(θ,ϕ);kwargs...)
 end
 
-function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},l::Integer,
+function Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,
 	(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...)
 
 	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
 
 	dj_θ = zeros(m_range,n_range)
 
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;n_range=n_range,kwargs...,compute_d_matrix=true)
+	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;n_range=n_range,kwargs...,compute_d_matrix=true)
 end
 
 function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},
@@ -284,39 +284,39 @@ function YSH_fill!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
 	end
 end
 
-function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
+function Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
 
 	YSH = SphericalHarmonics.allocate_y(l)
-	Ylmatrix!(OSH(),Y,YSH,l,(θ,ϕ);kwargs...,compute_Ylm=true,compute_Pl=true)
+	Ylmatrix!(T,Y,YSH,l,(θ,ϕ);kwargs...,compute_Ylm=true,compute_Pl=true)
 end
 
-function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
+function Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},
 	YSH::AbstractVector{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};
 	kwargs...)
 
-	P = get(kwargs,:compute_Pl,false) ? compute_p(l,cos(θ)) : nothing
+	Plm_cosθ = get(kwargs,:compute_Pl,true) ? compute_p(l,cos(θ)) : nothing
 	
-	Ylmatrix!(OSH(),Y,YSH,l,(θ,ϕ),P;kwargs...)
+	Ylmatrix!(T,Y,YSH,l,(θ,ϕ),Plm_cosθ;kwargs...)
 end
 
 function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
 	YSH::AbstractVector{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
-	P::Vector{<:Real},Pcoeff=nothing;kwargs...)
+	Plm_cosθ::Vector{<:Real},Pcoeff=nothing;kwargs...)
 
 	m_range = get_m_n_ranges(l,OSHindices();kwargs...) |> first
 
-	if get(kwargs,:compute_Pl,false)
+	if get(kwargs,:compute_Pl,true)
 		if isnothing(Pcoeff)
 			Pcoeff = SphericalHarmonics.compute_coefficients(l)
 		end
-		compute_p!(l,cos(θ),Pcoeff,P)
+		compute_p!(l,cos(θ),Pcoeff,Plm_cosθ)
 	end
 
-	if get(kwargs,:compute_Ylm,false)
-		compute_y!(l,ϕ,P,YSH)
+	if get(kwargs,:compute_Ylm,true)
+		compute_y!(l,ϕ,Plm_cosθ,YSH)
 	end
 
 	YSH_fill!(Y,YSH,l,m_range)
@@ -327,10 +327,10 @@ end
 function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
 	YSH::AbstractVector{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
-	P::Nothing;kwargs...)
+	::Nothing;kwargs...)
 
 	m_range = first(get_m_n_ranges(l,OSHindices();kwargs...))
-	if get(kwargs,:compute_Ylm,false)
+	if get(kwargs,:compute_Ylm,true)
 		compute_y!(l,cos(θ),ϕ,YSH)
 	end
 	YSH_fill!(Y,YSH,l,m_range)
@@ -368,10 +368,10 @@ Ylmatrix(T::AbstractSH,dj_θ::AbstractMatrix{<:Real},l::Integer,x::SphericalPoin
 	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...)
 
 Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
 
 Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
+	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
 
 Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint,args...;kwargs...) = 
 	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
@@ -436,10 +436,10 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,β::Integer,γ::Integer,
 	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 	# only t=0
 	if iszero(length(Yℓ₁n₁)) 
-		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁),n_range=β:β)
 	end
 	if iszero(length(Yℓ₂n₂))
-		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂),n_range=γ:γ)
 	end
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
 	m_max = min(ℓ₁,ℓ₂) ::Integer
@@ -459,10 +459,10 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 	# only t=0
 
 	if iszero(length(Yℓ₁n₁)) 
-		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 	if iszero(length(Yℓ₂n₂))
-		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 	m_max = min(ℓ₁,ℓ₂)
 
@@ -501,11 +501,11 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,
 
 	# only t=0
 	if iszero(length(Yℓ₁n₁))
-		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	if iszero(length(Yℓ₂n₂)) 
-		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
@@ -525,11 +525,11 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 
 	if iszero(length(Yℓ₁n₁))
-		Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	if iszero(length(Yℓ₂n₂)) 
-		Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
+		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
 	end
 
 	m_max = min(ℓ₁,ℓ₂)
@@ -577,7 +577,7 @@ struct BSH{TSH<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{
 	parent :: AA
 end
 
-function BSH(st_iterator::SHModeRange,
+function BSH(st_iterator::SHModeRange;
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1)
 
@@ -681,12 +681,11 @@ function Base.show(io::IO, ::MIME"text/plain", b::BSH)
 end
 
 # BiPoSH Yℓ₁ℓ₂st(n₁,n₂)
+# methods for ordinary and generalized spherical harmonics
 
 # Fall back to the generalized SH by default
 BiPoSH(args...;kwargs...) = BiPoSH(GSH(),args...;kwargs...)
 BiPoSH!(args...;kwargs...) = BiPoSH!(GSH(),args...;kwargs...)
-
-# methods for ordinary and generalized spherical harmonics
 
 function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
@@ -696,30 +695,51 @@ function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::In
 	Yℓ₁ℓ₂n₁n₂[s,t,β,γ]
 end
 
-function BiPoSH(::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
+function BiPoSH(ASH::GSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
 	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	β_range::AbstractUnitRange=-1:1,
-	γ_range::AbstractUnitRange=-1:1)
+	(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
+	β::AbstractUnitRange=-1:1,
+	γ::AbstractUnitRange=-1:1)
 	
-	Yℓ₁n₁ = Ylmatrix(ℓ₁,(θ₁,ϕ₁),n_range=β_range)
-	Yℓ₂n₂ = Ylmatrix(ℓ₂,(θ₂,ϕ₂),n_range=γ_range)
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
-	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β_range,γ_range)
+	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
+	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 
-	for γ in γ_range,β in β_range
-		for m in -ℓ₁:ℓ₁
-			n = t - m
-			if abs(n)>ℓ₂
-				continue
-			end
-			Yℓ₁ℓ₂n₁n₂[s,t,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,n,s,t)*Yℓ₁n₁[m,β]*Yℓ₂n₂[n,γ]
-		end
-	end
+	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
+	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
 
-	return Yℓ₁ℓ₂n₁n₂
+	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β=β,γ=γ)
+
+	BiPoSH!(GSH(),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,(θ₁,ϕ₁),(θ₂,ϕ₂),
+		Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,
+		β=β,γ=γ,
+		compute_dℓ₁=true,compute_dℓ₂=true,
+		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+end
+
+function BiPoSH(::OSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
+	(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
+	β::AbstractUnitRange=0:0,
+	γ::AbstractUnitRange=0:0)
+	
+	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
+	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
+
+	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,0:0)
+	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,0:0)
+
+	YSH1 = SphericalHarmonics.compute_y(ℓ₁,cos(θ₁),ϕ₁)
+	YSH2 = SphericalHarmonics.compute_y(ℓ₂,cos(θ₂),ϕ₂)
+
+	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β=0:0,γ=0:0)
+
+	BiPoSH!(OSH(),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,(θ₁,ϕ₁),(θ₂,ϕ₂),
+		Yℓ₁n₁,Yℓ₂n₂,YSH1,YSH2,
+		compute_Yℓ₁=false,compute_Yℓ₂=false,
+		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
 BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
@@ -744,7 +764,7 @@ function BiPoSH(::GSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
 
 	if (β==0:0) && (γ==0:0)
 		# Fall back to the faster ordinary BSH
-		BiPoSH(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,args...;kwargs...)
+		return BiPoSH(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,args...;kwargs...)
 	end
 
 	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
@@ -1176,7 +1196,8 @@ function BiPoSH_compute!(ASH::AbstractSH,B::BSH{st},ℓ₁::Integer,ℓ₂::Inte
 	t::AbstractUnitRange=-maximum(s):maximum(s),
 	args...;kwargs...)
 
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,st(s,t),
+	T = typeof(modes(B))
+	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,T(s,t),
 	(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
 end
 
@@ -1189,20 +1210,40 @@ function BiPoSH_compute!(ASH::AbstractSH,
 	Yℓ₂n₂::AbstractMatrix{<:Complex},
 	β::AbstractUnitRange=-1:1,
 	γ::AbstractUnitRange=-1:1,
-	dℓ₁::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
-	dℓ₂::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
+	dℓ₁θ_or_Yl₁m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
+	dℓ₂θ_or_Yl₂m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
 	CG=nothing,w3j=nothing,
 	compute_dℓ₁=true,compute_dℓ₂=true,
 	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
+	compute_Yℓ₁=true,compute_Yℓ₂=true,
 	wig3j_fn_ptr=nothing)
 
 	if compute_Yℓ₁n₁
-		Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁,ℓ₁,(θ₁,ϕ₁),n_range=β,
-			compute_d_matrix= !isnothing(dℓ₁) && compute_dℓ₁)
+		if isa(ASH,GSH)
+
+			Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁θ_or_Yl₁m,ℓ₁,(θ₁,ϕ₁),n_range=β,
+			compute_d_matrix = !isnothing(dℓ₁θ_or_Yl₁m) && compute_dℓ₁)
+
+		elseif isa(ASH,OSH)
+
+			Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁θ_or_Yl₁m,ℓ₁,(θ₁,ϕ₁),n_range=0:0,
+			compute_Ylm = !isnothing(dℓ₁θ_or_Yl₁m) && compute_Yℓ₁)
+
+		end
 	end
-	if compute_Yℓ₂n₂
-		Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂,ℓ₂,(θ₂,ϕ₂),n_range=γ,
-			compute_d_matrix= !isnothing(dℓ₂) && compute_dℓ₂ && (dℓ₂ !== dℓ₁) )
+	if compute_Yℓ₂n₂ 
+		if isa(ASH,GSH)
+			
+			Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂θ_or_Yl₂m,ℓ₂,(θ₂,ϕ₂),n_range=γ,
+			compute_d_matrix = !isnothing(dℓ₂θ_or_Yl₂m) && 
+			compute_dℓ₂ && (dℓ₂θ_or_Yl₂m !== dℓ₁θ_or_Yl₁m))
+
+		elseif isa(ASH,OSH)
+
+			Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂θ_or_Yl₂m,ℓ₂,(θ₂,ϕ₂),n_range=0:0,
+			compute_Ylm = !isnothing(dℓ₂θ_or_Yl₂m) && compute_Yℓ₂)
+
+		end
 	end
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(ComplexF64))
