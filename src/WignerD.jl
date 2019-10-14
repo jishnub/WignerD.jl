@@ -472,7 +472,7 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,β:β,γ:γ)
 
 	@inbounds for m in -m_max:m_max
-		CG = CG_l1m1_l2m2_st(ℓ₁,m,ℓ₂)
+		CG = CG_l₁m₁_l₂m₂_st(ℓ₁,m,ℓ₂)
 
 		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 		
@@ -529,7 +529,7 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,-1:1,-1:1)
 
 	@inbounds  for m in -m_max:m_max
-		CG = CG_l1m1_l2m2_st(ℓ₁,m,ℓ₂)
+		CG = CG_l₁m₁_l₂m₂_st(ℓ₁,m,ℓ₂)
 
 		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 
@@ -1228,7 +1228,7 @@ function BiPoSH_compute!(ASH::AbstractSH,
 						continue
 					end
 
-					CG_l1m1_l2m2_st!(CG,ℓ₁,m,ℓ₂,t)
+					CG_l₁m₁_l₂m₂_st!(CG,ℓ₁,m,ℓ₂,t)
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m]*Yℓ₂n₂γ[n]
 
@@ -1246,15 +1246,15 @@ end
 
 ##################################################################################################
 
-function CG_l1m1_l2m2_st(ℓ₁,m₁,ℓ₂,t=0)
+function CG_l₁m₁_l₂m₂_st(ℓ₁,m₁,ℓ₂,t=0)
 	# Compute the Clebsch Gordan coefficients C_{l₁m₁,l₂m₂}^{st} for all valid s
 	smin = max(abs(ℓ₁-ℓ₂),abs(t))
 	smax = ℓ₁ + ℓ₂
 	CG = zeros(smin:smax)
-	CG_l1m1_l2m2_st!(CG,ℓ₁,m₁,ℓ₂,t)
+	CG_l₁m₁_l₂m₂_st!(CG,ℓ₁,m₁,ℓ₂,t)
 end
 
-function CG_l1m1_l2m2_st!(CG,ℓ₁,m,ℓ₂,t=0)
+function CG_l₁m₁_l₂m₂_st!(CG,ℓ₁,m,ℓ₂,t=0)
 	# Compute the Clebsch Gordan coefficients C_{l₁m,l₂n}^{st}
 	n = t-m
 	for s in max(abs(t),abs(ℓ₁-ℓ₂)):abs(ℓ₁+ℓ₂)

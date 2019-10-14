@@ -20,19 +20,19 @@ end
 
 @testset "Clebsch-Gordan" begin
 	@testset "allocating" begin
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,1,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_st(1,1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_st(1,-1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,-1,1,1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,-1,1,1,1,0) ≈ -1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,-1,1,1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,0,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_st(1,0,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,0,1,0,0,0) ≈ -1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,0,1,0,1,0) ≈ 0
@@ -41,7 +41,7 @@ end
 	@testset "non-allocating" begin
 		CG = zeros(0:2)
 
-		WignerD.CG_ℓ₁mℓ₂nst!(CG,1,1,1,0)
+		WignerD.CG_l₁m₁_l₂m₂_st!(CG,1,1,1,0)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
