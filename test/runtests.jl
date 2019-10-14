@@ -18,11 +18,6 @@ OffsetArrays,SphericalHarmonics,Test
 	@test d1[-1,-1] ≈ (1+cos(θ))/2
 end
 
-@testset "Wigner3j" begin
-	@test WignerD.Wigner3j(1,1,1,-1) ≈ [1/√3,1/√6,1/√30]
-	@test WignerD.Wigner3j(2,2,1,-1) ≈ [-1/√5,-1/√30,1/√70,√(2/35),2*√(2/35)/3]
-end
-
 @testset "Clebsch-Gordan" begin
 	@testset "allocating" begin
 		CG = WignerD.CG_ℓ₁mℓ₂nst(1,1,1)
@@ -45,14 +40,8 @@ end
 	end
 	@testset "non-allocating" begin
 		CG = zeros(0:2)
-		w3j = zeros(3)
-		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG,w3j)
 
-		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
-		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
-		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
-
-		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG)
+		WignerD.CG_ℓ₁mℓ₂nst!(CG,1,1,1,0)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
@@ -125,7 +114,7 @@ end
 @testset "BiPoSH_OSH_10" begin
 	n1 = Point2D(π*rand(),2π*rand());
 	n2 = Point2D(π*rand(),2π*rand());
-	ℓmax = 200;
+	ℓmax = 10;
 	Yℓℓ_10 = zeros(ComplexF64,1:ℓmax);
 	dP = dPl(cosχ(n1,n2),lmax=ℓmax);
 	
@@ -162,7 +151,7 @@ end
 end
 
 @testset "BiPoSH t=0" begin
-	ℓ = rand(1:30)
+	ℓ = rand(1:10)
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
 	b_GSH_st = BiPoSH(GSH(),ℓ,ℓ,0:2ℓ,n1,n2,β=0,γ=0,t=0)

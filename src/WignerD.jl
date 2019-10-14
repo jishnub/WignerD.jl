@@ -1,6 +1,6 @@
 module WignerD
 
-using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
+using OffsetArrays, WignerSymbols, LinearAlgebra
 using PointsOnASphere,SphericalHarmonicModes
 using SphericalHarmonics
 import SphericalHarmonicModes: modeindex, s_valid_range, t_valid_range,
@@ -471,25 +471,14 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
 
 	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,β:β,γ:γ)
 
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
 	@inbounds for m in -m_max:m_max
-		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
+		CG = CG_l1m1_l2m2_st(ℓ₁,m,ℓ₂)
 
 		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 		
 		@inbounds for s in s_intersection
 			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 		end
-	end
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
 	end
 
 	return Yℓ₁ℓ₂n₁n₂
@@ -521,7 +510,7 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,
 end
 
 function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};wig3j_fn_ptr=nothing,
+	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
 	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
 
 	if iszero(length(Yℓ₁n₁))
@@ -539,25 +528,14 @@ function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
 
 	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,-1:1,-1:1)
 
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
 	@inbounds  for m in -m_max:m_max
-		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
+		CG = CG_l1m1_l2m2_st(ℓ₁,m,ℓ₂)
 
 		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
 
 		@inbounds for (s,β,γ) in Iterators.product(s_intersection,axes(Yℓ₁ℓ₂n₁n₂)[2:3]...)
 			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
 		end
-	end
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
 	end
 
 	return Yℓ₁ℓ₂n₁n₂
@@ -877,9 +855,7 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	Yℓn₂::AbstractMatrix{<:Complex},
 	YSH_n1=nothing,YSH_n2=nothing,
 	P=nothing,coeff=nothing;
-	CG=nothing,w3j=nothing,
-	wig3j_fn_ptr=nothing,
-	compute_Yℓ₁n₁=false,compute_Yℓ₂n₂=false)
+	CG=nothing,compute_Yℓ₁n₁=false,compute_Yℓ₂n₂=false)
 
 	lmax = maximum(s_range(ℓ′ℓ_smax))
 	l′max = maximum(s′_range(ℓ′ℓ_smax))
@@ -910,16 +886,6 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 		end
 	end
 
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	if isnothing(w3j)
-		w3j = zeros(lmax+l′max+1)
-	end
 	if isnothing(CG)
 		CG = zeros(0:lmax+l′max)
 	end
@@ -931,14 +897,9 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 						axes(SHModes,1),0:0,0:0)
 
 		B = BSH(SHModes,outputarr)
-		BiPoSH!(OSH(),B,
-			ℓ′,ℓ,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-			Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
-			CG=CG,w3j=w3j,β=0:0,γ=0:0,
-			wig3j_fn_ptr=wig3j_fn_ptr)
+		BiPoSH!(OSH(),B,ℓ′,ℓ,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
+			Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;CG=CG,β=0:0,γ=0:0)
 	end
-
-	!isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂
 end
@@ -1000,8 +961,7 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 	Yℓn₂::AbstractMatrix{<:Complex},
 	YSH_n1=nothing,YSH_n2=nothing,
 	P=nothing,coeff=nothing;
-	CG=nothing,w3j=nothing,
-	wig3j_fn_ptr=nothing,
+	CG=nothing,
 	compute_Yℓ₁n₁=true,
 	compute_Yℓ₂n₂=true)
 
@@ -1035,16 +995,6 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 		end
 	end
 
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	if isnothing(w3j)
-		w3j = zeros(lmax+l′max+1)
-	end
 	if isnothing(CG)
 		CG = zeros(0:lmax+l′max)
 	end
@@ -1092,19 +1042,15 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₂ℓn₁_st),
 				ℓ′,ℓ,(θ₂,ϕ₂),(θ₁,ϕ₁),
 				Yℓ′n₂,Yℓn₁,YSH_n2,YSH_n1;
-				CG=CG,w3j=w3j,β=0:0,γ=0:0,
-				wig3j_fn_ptr=wig3j_fn_ptr)
+				CG=CG,β=0:0,γ=0:0)
 
 			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₁ℓn₂_st),
 				ℓ′,ℓ,(θ₁,ϕ₁),(θ₂,ϕ₂),
 				Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
-				CG=CG,w3j=w3j,β=0:0,γ=0:0,
-				wig3j_fn_ptr=wig3j_fn_ptr)
+				CG=CG,β=0:0,γ=0:0)
 		end
 
 	end
-
-	!isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
@@ -1212,11 +1158,10 @@ function BiPoSH_compute!(ASH::AbstractSH,
 	γ::AbstractUnitRange=-1:1,
 	dℓ₁θ_or_Yl₁m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
 	dℓ₂θ_or_Yl₂m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
-	CG=nothing,w3j=nothing,
+	CG=nothing,
 	compute_dℓ₁=true,compute_dℓ₂=true,
 	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
-	compute_Yℓ₁=true,compute_Yℓ₂=true,
-	wig3j_fn_ptr=nothing)
+	compute_Yℓ₁=true,compute_Yℓ₂=true)
 
 	if compute_Yℓ₁n₁
 		if isa(ASH,GSH)
@@ -1255,16 +1200,6 @@ function BiPoSH_compute!(ASH::AbstractSH,
 	β_valid = intersect(β,axes(parent(Yℓ₁ℓ₂n₁n₂),2))
 	γ_valid = intersect(γ,axes(parent(Yℓ₁ℓ₂n₁n₂),3))
 
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	if isnothing(w3j)
-		w3j = zeros(ℓ₁+ℓ₂+1)
-	end
 	if isnothing(CG)
 		CG = zeros(abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂)
 	end
@@ -1280,7 +1215,7 @@ function BiPoSH_compute!(ASH::AbstractSH,
 			Yℓ₁ℓ₂n₁n₂βγ = view(Yℓ₁ℓ₂n₁n₂,:,β,γ)
 			
 			@inbounds for t in t_valid
-				
+
 				Yℓ₁ℓ₂n₁n₂βγt = view(Yℓ₁ℓ₂n₁n₂βγ,:,t)
 				
 				srange_t = s_valid_range(Yℓ₁ℓ₂n₁n₂,t)
@@ -1293,7 +1228,7 @@ function BiPoSH_compute!(ASH::AbstractSH,
 						continue
 					end
 
-					CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+					CG_l1m1_l2m2_st!(CG,ℓ₁,m,ℓ₂,t)
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m]*Yℓ₂n₂γ[n]
 
@@ -1306,127 +1241,27 @@ function BiPoSH_compute!(ASH::AbstractSH,
 		end
 	end
 
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
-	end
-
 	return Yℓ₁ℓ₂n₁n₂
 end
 
 ##################################################################################################
 
-function Wigner3j(j2,j3,m2,m3;wig3j_fn_ptr=nothing)
-	
-	m2,m3 = Int32(m2),Int32(m3)
-	m1 = Int32(-(m2 + m3))
-
-	j2,j3 = Int32(j2),Int32(j3)
-	len = Int32(j2+j3+1)
-
-	exitstatus = zero(Int32)
-
-	w3j = zeros(Float64,len)
-
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	ccall(wig3j_fn_ptr,Cvoid,
-		(Ref{Float64}, 	#w3j
-			Ref{Int32},	#len
-			# Ref{Int32},	#jmin
-			# Ref{Int32},	#jmax
-			Ref{Int32},	#j2
-			Ref{Int32},	#j3
-			Ref{Int32},	#m1
-			Ref{Int32},	#m2
-			Ref{Int32},	#m3
-			Ref{Int32}),#exitstatus
-		w3j,len, j2, j3, m1, m2,m3, exitstatus)
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
-	end
-
-	return w3j
-end
-
-function Wigner3j!(w3j,j2,j3,m2,m3;wig3j_fn_ptr=nothing)
-	
-	m2,m3 = Int32(m2),Int32(m3)
-	m1 = Int32(-(m2 + m3))
-
-	j2,j3 = Int32(j2),Int32(j3)
-	len = Int32(j2+j3+1)
-
-	@assert(length(w3j)>=len,"length of output array must be atleast j2+j3+1=$(j2+j3+1),"*
-							" supplied output array has a length of $(length(w3j))")
-
-	exitstatus = zero(Int32)
-
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	ccall(wig3j_fn_ptr,Cvoid,
-		(Ref{Float64}, 	#w3j
-			Ref{Int32},	#len
-			# Ref{Int32},	#jmin
-			# Ref{Int32},	#jmax
-			Ref{Int32},	#j2
-			Ref{Int32},	#j3
-			Ref{Int32},	#m1
-			Ref{Int32},	#m2
-			Ref{Int32},	#m3
-			Ref{Int32}),#exitstatus
-		w3j,len, j2, j3, m1, m2,m3, exitstatus)
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
-	end
-end
-
-function CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂,t=0;wig3j_fn_ptr=nothing)
-	n = t-m
+function CG_l1m1_l2m2_st(ℓ₁,m₁,ℓ₂,t=0)
+	# Compute the Clebsch Gordan coefficients C_{l₁m₁,l₂m₂}^{st} for all valid s
 	smin = max(abs(ℓ₁-ℓ₂),abs(t))
 	smax = ℓ₁ + ℓ₂
-	w = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	CG = OffsetArray(w[1:(smax-smin+1)],smin:smax)
-	@inbounds for s in axes(CG,1)
-		CG[s] *= √(2s+1)*(-1)^(ℓ₁-ℓ₂)
+	CG = zeros(smin:smax)
+	CG_l1m1_l2m2_st!(CG,ℓ₁,m₁,ℓ₂,t)
+end
+
+function CG_l1m1_l2m2_st!(CG,ℓ₁,m,ℓ₂,t=0)
+	# Compute the Clebsch Gordan coefficients C_{l₁m,l₂n}^{st}
+	n = t-m
+	for s in max(abs(t),abs(ℓ₁-ℓ₂)):abs(ℓ₁+ℓ₂)
+		CG[s] = clebschgordan(ℓ₁,m,ℓ₂,n,s,t)
 	end
 	return CG
 end
-
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG;wig3j_fn_ptr=nothing)
-	n = t-m
-	smin = max(abs(ℓ₁-ℓ₂),abs(t))
-	smax = ℓ₁ + ℓ₂
-	w3j = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂)
-	end
-	return CG
-end
-
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=nothing)
-	n = t-m
-	smin = max(abs(ℓ₁-ℓ₂),abs(t))
-	smax = ℓ₁ + ℓ₂
-	Wigner3j!(w3j,ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂)
-	end
-	return CG
-end
-
-include("./precompile.jl")
 
 end
 
