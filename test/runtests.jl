@@ -58,6 +58,27 @@ end
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6		
 	end
+	@testset "wignersymbols Wigner3j" begin
+		for j1=0:5,j2=0:5
+			smin,smax = abs(j1-j2),j1+j2
+			for m=-j1:j1,t=max(-smax,-j2+m):min(smax,j2+m)
+				W3 = WignerD.Wigner3j(j1,j2,m,t-m)[1:smax-max(abs(t),smin)+1]
+				W32 = [WignerD.wigner3j(j1,j2,s,m,t-m) for s=max(abs(t),smin):smax]
+				@test W3 ≈ W32
+			end
+		end
+	end
+	@testset "wignersymbols CG" begin
+		for j1=0:5,j2=0:5
+			smin,smax = abs(j1-j2),j1+j2
+			for m=-j1:j1,t=max(-smax,-j2+m):min(smax,j2+m)
+				CG = WignerD.CG_ℓ₁mℓ₂nst(j1,m,j2,t)[max(abs(t),smin):smax]
+				CGW = [WignerD.clebschgordan(j1,m,j2,t-m,s,t) for s=max(abs(t),smin):smax]
+				@test CG ≈ CGW
+			end
+		end
+	end
+
 end
 
 @testset "Ylm0" begin

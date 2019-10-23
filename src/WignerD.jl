@@ -1396,22 +1396,16 @@ function CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂,t=0;wig3j_fn_ptr=nothing)
 	n = t-m
 	smin = max(abs(ℓ₁-ℓ₂),abs(t))
 	smax = ℓ₁ + ℓ₂
-	w = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	CG = OffsetArray(w[1:(smax-smin+1)],smin:smax)
-	@inbounds for s in axes(CG,1)
-		CG[s] *= √(2s+1)*(-1)^(ℓ₁-ℓ₂)
-	end
+	w3j = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
+	CG = OffsetArray(w3j[1:(smax-smin+1)],smin:smax)
+	CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
 function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG;wig3j_fn_ptr=nothing)
 	n = t-m
-	smin = max(abs(ℓ₁-ℓ₂),abs(t))
-	smax = ℓ₁ + ℓ₂
 	w3j = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂)
-	end
+	CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
@@ -1421,7 +1415,7 @@ function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=nothing)
 	smax = ℓ₁ + ℓ₂
 	Wigner3j!(w3j,ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
 	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂)
+		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂+t)
 	end
 	return CG
 end
