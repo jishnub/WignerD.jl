@@ -774,7 +774,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 			@inbounds for m in m_valid
 				
 				lrange_m = l_range(Yℓ₁ℓ₂n₁n₂,m)
-				lrange_m_valid = intersect(lrange_m,l_valid)
+				first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
 				
 				@inbounds for m₁ in -ℓ₁:ℓ₁
 		
@@ -787,8 +787,9 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
 
-					@inbounds for l in lrange_m_valid
-						Yℓ₁ℓ₂n₁n₂[(l,m),β,γ] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
+					@inbounds for (ind,l) in enumerate(lrange_m)
+						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+						Yℓ₁ℓ₂n₁n₂[l_ind,β,γ] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
 					end
 				end
 			end
@@ -827,7 +828,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	@inbounds for m in m_valid
 		
 		lrange_m = l_range(lm_modes,m)
-		lrange_m_valid = intersect(lrange_m,l_valid)
+		first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
 		
 		@inbounds for m₁ in -ℓ₁:ℓ₁
 			m₂ = m - m₁
@@ -835,8 +836,9 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 			CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
-			@inbounds for ℓ in lrange_m_valid
-				Yℓ₁ℓ₂n₁n₂[(ℓ,m)] += CG[ℓ]*Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
+			@inbounds for (ind,l) in enumerate(lrange_m)
+				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
 			end
 		end
 	end
