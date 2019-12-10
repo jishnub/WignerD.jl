@@ -344,7 +344,6 @@ end
 
 # BiPoSH Yℓ₁ℓ₂LM(n₁,n₂)
 # methods for ordinary and generalized spherical harmonics
-
 function allocate_Y₁Y₂(::OSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -620,8 +619,6 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 			compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 	end
 
-	!isnothing(lib) && Libdl.dlclose(lib)
-
 	return Yℓ′n₁ℓn₂
 end
 
@@ -671,7 +668,6 @@ end
 	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOnlyFirstAxis},
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
-
 
 """
 	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
@@ -749,7 +745,6 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 		end
 	end
-
 	end # views
 
 	!isnothing(lib) && Libdl.dlclose(lib)
@@ -845,8 +840,6 @@ end
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
-
-
 # The actual functions that do the calculation for one pair of (ℓ₁,ℓ₂) and 
 # (θ₁,ϕ₁) and (θ₂,ϕ₂). The BiPoSH! functions call these.
 # We assume that the monopolar YSH are already computed in the BiPoSH! calls
@@ -884,7 +877,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 		@inbounds for β in β_valid
 			
 			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
-			
+
 			@inbounds for m in m_valid
 				
 				lrange_m = l_range(Yℓ₁ℓ₂n₁n₂,m)
@@ -897,7 +890,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 						continue
 					end
 
-					CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+					CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
 
@@ -908,10 +901,6 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 				end
 			end
 		end
-	end
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
 	end
 
 	return Yℓ₁ℓ₂n₁n₂
@@ -948,7 +937,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 			m₂ = m - m₁
 			abs(m₂) > ℓ₂ && continue
 
-			CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+			CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
 			Yℓ₁n₁m₁Yℓ₂n₂m₂ = Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
 
@@ -1051,31 +1040,31 @@ function Wigner3j!(w3j,j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 	end
 end
 
-# Computes the Clebsch-Gordan coefficient C_{ℓ₁m₁ℓ₂m₂}^{ℓm} for all valid ℓ
-function CG_ℓ₁mℓ₂nst(ℓ₁,m₁,ℓ₂,m=0;wig3j_fn_ptr=nothing)
+# Computes the Clebsch-Gordan coefficient C_{l₁m₁l₂m₂}^{lm} for all valid l
+function CG_l₁m₁_l₂m₂_lm(ℓ₁,m₁,ℓ₂,m=0;wig3j_fn_ptr=nothing)
 	m₂ = m-m₁
-	smin = max(abs(ℓ₁-ℓ₂),abs(m))
-	smax = ℓ₁ + ℓ₂
+	lmin = max(abs(ℓ₁-ℓ₂),abs(m))
+	lmax = ℓ₁ + ℓ₂
 	w3j = Wigner3j(ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
-	CG = OffsetArray(w3j[1:(smax-smin+1)],smin:smax)
-	CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+	CG = OffsetArray(w3j[1:(lmax-lmin+1)],lmin:lmax)
+	CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG;wig3j_fn_ptr=nothing)
+function CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG;wig3j_fn_ptr=nothing)
 	m₂ = m-m₁
 	w3j = Wigner3j(ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
-	CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+	CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=nothing)
+function CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=nothing)
 	m₂ = m-m₁
-	smin = max(abs(ℓ₁-ℓ₂),abs(m))
-	smax = ℓ₁ + ℓ₂
+	lmin = max(abs(ℓ₁-ℓ₂),abs(m))
+	lmax = ℓ₁ + ℓ₂
 	Wigner3j!(w3j,ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
-	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂+m)
+	@inbounds for (ind,l) in enumerate(lmin:lmax)
+		CG[l] = w3j[ind]*√(2l+1)*(-1)^(ℓ₁-ℓ₂+m)
 	end
 	return CG
 end

@@ -18,26 +18,21 @@ OffsetArrays,SphericalHarmonics,SphericalHarmonicArrays,Test
 	@test d1[-1,-1] ≈ (1+cos(θ))/2
 end
 
-@testset "Wigner3j" begin
-	@test WignerD.Wigner3j(1,1,1,-1) ≈ [1/√3,1/√6,1/√30]
-	@test WignerD.Wigner3j(2,2,1,-1) ≈ [-1/√5,-1/√30,1/√70,√(2/35),2*√(2/35)/3]
-end
-
 @testset "Clebsch-Gordan" begin
 	@testset "allocating" begin
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,1,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,-1,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,-1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,-1,1,1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,-1,1,1,1,0) ≈ -1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,-1,1,1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_ℓ₁mℓ₂nst(1,0,1)
+		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,0,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,0,1,0,0,0) ≈ -1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,0,1,0,1,0) ≈ 0
@@ -45,14 +40,8 @@ end
 	end
 	@testset "non-allocating" begin
 		CG = zeros(0:2)
-		w3j = zeros(3)
-		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG,w3j)
 
-		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
-		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
-		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
-
-		WignerD.CG_ℓ₁mℓ₂nst!(1,1,1,0,CG)
+		WignerD.CG_l₁m₁_l₂m₂_lm!(1,1,1,0,CG)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
@@ -72,7 +61,7 @@ end
 		for j1=0:5,j2=0:5
 			smin,smax = abs(j1-j2),j1+j2
 			for m=-j1:j1,t=max(-smax,-j2+m):min(smax,j2+m)
-				CG = WignerD.CG_ℓ₁mℓ₂nst(j1,m,j2,t)[max(abs(t),smin):smax]
+				CG = WignerD.CG_l₁m₁_l₂m₂_lm(j1,m,j2,t)[max(abs(t),smin):smax]
 				CGW = [WignerD.clebschgordan(j1,m,j2,t-m,s,t) for s=max(abs(t),smin):smax]
 				@test CG ≈ CGW
 			end
@@ -145,6 +134,7 @@ end
 @testset "BiPoSH_OSH_10" begin
 	n1 = Point2D(π*rand(),2π*rand());
 	n2 = Point2D(π*rand(),2π*rand());
+
 	lmax = 10;
 	Yℓℓ_10 = zeros(ComplexF64,1:lmax);
 	dP = dPl(cosχ(n1,n2),lmax=lmax);

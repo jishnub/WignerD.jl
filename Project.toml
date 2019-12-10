@@ -16,8 +16,23 @@ WignerSymbols = "9f57e263-0b3d-5e2e-b1be-24f2bb48858b"
 
 [extras]
 LegendrePolynomials = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+PointsOnASphere = "efc6e1ae-3467-11e9-103f-8bc3b66ed045"
+SphericalHarmonicArrays = "9dd28c12-4719-4e7d-b634-e7b733a6d046"
+SphericalHarmonics = "c489a379-e885-57ff-9236-bd896d33c250"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TwoPointFunctions = "4eee33de-34ff-11e9-2471-f976ccef942e"
 
+[compat]
+julia = "1"
+LegendrePolynomials = "0.2"
+OffsetArrays = "0.11"
+PointsOnASphere = "0.1"
+SphericalHarmonicArrays = "0.1"
+SphericalHarmonicModes = "0.3"
+SphericalHarmonics = "0.0"
+TwoPointFunctions = "0.1"
+WignerSymbols = "1"
+
 [targets]
-test = ["LegendrePolynomials", "TwoPointFunctions", "Test"]
+test = ["LegendrePolynomials", "OffsetArrays", "PointsOnASphere", "SphericalHarmonicArrays", "SphericalHarmonics","Test", "TwoPointFunctions"]
