@@ -165,7 +165,7 @@ version = "0.8.0"
 
 [[SphericalHarmonicArrays]]
 deps = ["OffsetArrays", "Reexport", "SphericalHarmonicModes"]
-git-tree-sha1 = "f4501af58f89bf5bbe5a76433151d1838ab35b8d"
+git-tree-sha1 = "734da1cdf145f7c2ea139eebac550f3bc2d8a88a"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicArrays.jl"
 uuid = "9dd28c12-4719-4e7d-b634-e7b733a6d046"

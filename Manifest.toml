@@ -80,11 +80,11 @@ uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[LegendrePolynomials]]
 deps = ["HyperDualNumbers", "OffsetArrays"]
-git-tree-sha1 = "f94ff26fb4fd889baf6825ffd7388a7cdbeb5cf6"
+git-tree-sha1 = "12354735e458782db3ce2d4a173dc9cbf84ea8d3"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/LegendrePolynomials.jl"
 uuid = "3db4a2ba-fc88-11e8-3e01-49c72059a882"
-version = "0.2.1"
+version = "0.2.2"
 
 [[LibGit2]]
 uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
@@ -112,9 +112,9 @@ uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.3"
 
 [[OffsetArrays]]
-git-tree-sha1 = "1af2f79c7eaac3e019a0de41ef63335ff26a0a57"
+git-tree-sha1 = "27f32af4e7b11f5aa9f3cad60b777cd042af149a"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "0.11.1"
+version = "0.11.3"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -176,7 +176,7 @@ version = "0.8.0"
 
 [[SphericalHarmonicArrays]]
 deps = ["OffsetArrays", "Reexport", "SphericalHarmonicModes"]
-git-tree-sha1 = "f4501af58f89bf5bbe5a76433151d1838ab35b8d"
+git-tree-sha1 = "734da1cdf145f7c2ea139eebac550f3bc2d8a88a"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicArrays.jl"
 uuid = "9dd28c12-4719-4e7d-b634-e7b733a6d046"

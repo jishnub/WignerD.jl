@@ -3,7 +3,7 @@ module WignerD
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
 using PointsOnASphere,SphericalHarmonicArrays, SphericalHarmonics
 
-import SphericalHarmonicArrays: SHArrayFirstAxis
+import SphericalHarmonicArrays: SHArrayOnlyFirstAxis
 import SphericalHarmonicModes: ModeRange, SHModeRange
 
 export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,Jy_eigen,
@@ -575,7 +575,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 end
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	B::SHArrayFirstAxis,ℓ₁::Integer,args...;kwargs...) = 
+	B::SHArrayOnlyFirstAxis,ℓ₁::Integer,args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,B,shmodes(B),ℓ₁,args...;kwargs...)
 
 @inline BiPoSH!(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
@@ -613,11 +613,48 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	@inbounds for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
-		BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),
-			Yℓ′n₁ℓn₂[ℓ′ℓind],shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),
-			ℓ′,ℓ,YSH_n₁,YSH_n₂,P,coeff;
+		BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
+			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
+			YSH_n₁,YSH_n₂,P,coeff;
 			CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 			compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
+	end
+
+	!isnothing(lib) && Libdl.dlclose(lib)
+
+	return Yℓ′n₁ℓn₂
+end
+
+function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::AbstractVector{<:SHArray{<:Number,3}},
+	ℓ′ℓ_smax::L₂L₁Δ,
+	Yℓ₁n₁::AbstractMatrix{<:Complex},
+	Yℓ₂n₂::AbstractMatrix{<:Complex},
+	dℓ₁n₁::AbstractMatrix{<:Real},
+	dℓ₂n₂::AbstractMatrix{<:Real};
+	CG=nothing,w3j=nothing,
+	wig3j_fn_ptr=nothing,
+	compute_Y₁=true,compute_Y₂=true)
+
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+
+	lib = nothing
+
+	if isnothing(wig3j_fn_ptr)
+		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
+	end
+
+	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+
+	@inbounds for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
+		BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
+			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
+			Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂;
+			CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+			compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
 	end
 
 	!isnothing(lib) && Libdl.dlclose(lib)
@@ -631,7 +668,7 @@ end
 	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	Yℓ′n₁ℓn₂::SHVector{<:SHArrayFirstAxis},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOnlyFirstAxis},
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
@@ -644,11 +681,11 @@ end
 	Returns Yℓ′n₁ℓn₂ and Yℓ′n₂ℓn₁
 """
 function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
-	Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
-	Yℓ′n₂ℓn₁::AbstractVector{<:SHVector},
+	Yℓ′n₁ℓn₂::AbstractVector{<:SHVector{<:Number}},
+	Yℓ′n₂ℓn₁::AbstractVector{<:SHVector{<:Number}},
 	ℓ′ℓ_smax::L₂L₁Δ,
-	YSH_n₁::AbstractVector{<:Complex},
-	YSH_n₂::AbstractVector{<:Complex},
+	YSH_n₁::AbstractVector{<:Number},
+	YSH_n₂::AbstractVector{<:Number},
 	P::AbstractVector{<:Real},coeff;
 	CG=nothing,w3j=nothing,
 	wig3j_fn_ptr=nothing,
@@ -720,14 +757,91 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
 
+function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::AbstractVector{<:SHArray{<:Number,3}},
+	Yℓ′n₂ℓn₁::AbstractVector{<:SHArray{<:Number,3}},
+	ℓ′ℓ_smax::L₂L₁Δ,
+	Yℓ₁n₁::AbstractMatrix{<:Complex},
+	Yℓ₂n₂::AbstractMatrix{<:Complex},
+	dℓ₁n₁::AbstractMatrix{<:Real},
+	dℓ₂n₂::AbstractMatrix{<:Real};
+	CG=nothing,w3j=nothing,
+	wig3j_fn_ptr=nothing,
+	compute_Y₁=true,
+	compute_Y₂=true)
+
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	ll′max = max(lmax,l′max)
+
+	lib = nothing
+
+	if isnothing(wig3j_fn_ptr)
+		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
+	end
+
+	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+
+	@views begin
+
+	@inbounds for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
+		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
+
+		Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[indℓ′ℓ]
+		Yℓ′n₂ℓn₁_st = Yℓ′n₂ℓn₁[indℓ′ℓ]
+
+		# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
+		# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
+		# Precomputation of the RHS would have happened if ℓ′<ℓ, 
+		# as the modes are sorted in order of increasing ℓ
+
+		if (ℓ,ℓ′) in ℓ′ℓ_smax && ℓ′<ℓ
+			# In this case Yℓn₁ℓ′n₂ and Yℓn₂ℓ′n₁ have already been computed
+			# This means we can evaluate Yℓ′n₂ℓn₁ and Yℓ′n₁ℓn₂ using the formulae
+			# presented above
+
+			indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
+			Yℓn₁ℓ′n₂_st = Yℓ′n₁ℓn₂[indℓℓ′]
+			Yℓn₂ℓ′n₁_st = Yℓ′n₂ℓn₁[indℓℓ′]
+
+			for γ in axes(Yℓn₁ℓ′n₂_st,3), β in axes(Yℓn₁ℓ′n₂_st,2)
+				for (indst,(s,t)) in enumerate(shmodes(Yℓ′n₂ℓn₁_st))
+					Yℓ′n₂ℓn₁_st[indst,β,γ] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst,γ,β]
+					Yℓ′n₁ℓn₂_st[indst,β,γ] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst,γ,β]
+				end
+			end
+		else
+			# Default case, where we need to evaluate both
+
+			BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
+				Yℓ₂n₂,Yℓ₁n₁,dℓ₂n₂,dℓ₁n₁;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
+
+			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
+				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=(ℓ != ℓ′),compute_Y₂=(ℓ != ℓ′))
+		end
+	end
+
+	end # views
+
+	!isnothing(lib) && Libdl.dlclose(lib)
+
+	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
+end
+
 @inline BiPoSH!(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 	Yℓ′n₁ℓn₂::SHVector{<:SHVector},Yℓ′n₂ℓn₁::SHVector{<:SHVector},
 	Y1::AbstractVector{<:Complex},args...;kwargs...) = 
 	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	Yℓ′n₁ℓn₂::SHVector{<:SHArrayFirstAxis},
-	Yℓ′n₂ℓn₁::SHVector{<:SHArrayFirstAxis},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOnlyFirstAxis},
+	Yℓ′n₂ℓn₁::SHVector{<:SHArrayOnlyFirstAxis},
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
@@ -836,9 +950,11 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 			CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
+			Yℓ₁n₁m₁Yℓ₂n₂m₂ = Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
+
 			@inbounds for (ind,l) in enumerate(lrange_m)
 				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
-				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
+				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁m₁Yℓ₂n₂m₂
 			end
 		end
 	end

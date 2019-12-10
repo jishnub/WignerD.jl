@@ -216,8 +216,8 @@ end
 @testset "BiPoSH ℓrange 2pt" begin
 	n1 = Point2D(π/2,0);
 	n2 = Point2D(π/2,π/3);
-	SHModes = LM(0,2);
-	ℓ_range = 0:2;
+	SHModes = LM(0,5);
+	ℓ_range = 0:5;
 	ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
 	function test_and_print_fail(arr,(ℓ′ℓind,ℓ′,ℓ),match_arr)
 		@test begin 
