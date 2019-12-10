@@ -1,15 +1,14 @@
 module WignerD
 
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
-using PointsOnASphere,SphericalHarmonicModes
-using SphericalHarmonics
-import SphericalHarmonicModes: modeindex, s_valid_range, t_valid_range,
-s_range,t_range
+using PointsOnASphere,SphericalHarmonicArrays, SphericalHarmonics
 
-export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,
-djmn,djmatrix,BiPoSH_s0,BiPoSH,BiPoSH_n1n2_n2n1,BiPoSH!,BSH,Jy_eigen,
-st,ts,s′s,modes,modeindex,SphericalHarmonic,SphericalHarmonic!,st,ts,
-OSH,GSH
+import SphericalHarmonicArrays: SHArrayFirstAxis
+import SphericalHarmonicModes: ModeRange, SHModeRange
+
+export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,Jy_eigen,
+djmn,djmatrix,BiPoSH,BiPoSH_n1n2_n2n1,BiPoSH!,
+SphericalHarmonic,SphericalHarmonic!,OSH,GSH
 
 ##########################################################################
 # Wigner d matrix
@@ -215,209 +214,125 @@ abstract type AbstractSH end
 struct GSH <: AbstractSH end # Generalized SH
 struct OSH <: AbstractSH end # Ordinary SH
 
-# Use the generalized spherical harmonics by default
-Ylmatrix(args...;kwargs...) = Ylmatrix(GSH(),args...;kwargs...)
-Ylmatrix!(args...;kwargs...) = Ylmatrix!(GSH(),args...;kwargs...)
+# Convenience function to convert an integer to a UnitRange to be used as an array axis
+const IntegerOrUnitRange = Union{Integer,AbstractUnitRange{<:Integer}}
+to_unitrange(a::Integer) = a:a
+to_unitrange(a::AbstractUnitRange{<:Integer}) = a
 
-function Ylmatrix(T::GSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
+function allocate_YP(::OSH,lmax::Integer)
+	YSH = SphericalHarmonics.allocate_y(lmax)
+	coeff = SphericalHarmonics.compute_coefficients(lmax)
+	P = SphericalHarmonics.allocate_p(lmax)
+	return YSH,P,coeff
+end
+function compute_YP!(lmax,(θ,ϕ),Y,P,coeff,
+	compute_Pl::Bool=true,compute_Y::Bool=true)
 
-	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
-
-	dj_θ = djmatrix(l,θ;kwargs...,n_range=n_range)
-	Y = zeros(ComplexF64,axes(dj_θ)...)
-	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
+	compute_Pl && compute_p!(lmax,cos(θ),coeff,P)
+	compute_Y && compute_y!(lmax,ϕ,P,Y)
 end
 
-function Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
-
-	n_range = last(get_m_n_ranges(l,GSHindices();kwargs...))
-	m_range = axes(dj_θ,1)
-
-	Y = zeros(ComplexF64,m_range,n_range)
-	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,n_range=n_range,kwargs...)
-end
-
-function Ylmatrix(T::OSH,l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
-	m_range,n_range = get_m_n_ranges(l,OSHindices();kwargs...)
-	Y = zeros(ComplexF64,m_range,n_range)
-	Ylmatrix!(T,Y,l,(θ,ϕ);kwargs...)
-end
-
-function Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,
-	(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...)
+function Ylmatrix(::GSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
 
 	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
 
-	dj_θ = zeros(m_range,n_range)
+	dj_θ = djmatrix(l,θ;kwargs...,m_range=m_range,n_range=n_range)
+	Y = zeros(ComplexF64,axes(dj_θ)...)
+	Ylmatrix!(GSH(),Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
+end
 
-	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;n_range=n_range,kwargs...,compute_d_matrix=true)
+function Ylmatrix(::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
+	(θ,ϕ)::Tuple{Real,Real};kwargs...)
+
+	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
+	m_range = intersect(axes(dj_θ,1),m_range)
+
+	Y = zeros(ComplexF64,m_range,n_range)
+	Ylmatrix!(GSH(),Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,
+		m_range=m_range,n_range=n_range,kwargs...)
+end
+
+function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
+	YSH,P,coeff = allocate_YP(OSH(),l)
+	Ylmatrix!(OSH(),YSH,l,(θ,ϕ),P,coeff;kwargs...)
 end
 
 function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},
-	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...)
+	l::Integer,(θ,ϕ)::Tuple{Real,Real},args...;kwargs...)
 
 	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
 
-	if get(kwargs,:compute_d_matrix,true):: Bool
-		djmatrix!(dj_θ,l,θ,args...;kwargs...,n_range=n_range)
+	if get(kwargs,:compute_d_matrix,true)
+		djmatrix!(dj_θ,l,θ,args...;kwargs...,m_range=m_range,n_range=n_range)
 	end
 
-	@inbounds for (m,n) in Iterators.product(m_range,n_range)
+	@inbounds for n in n_range,m in m_range
 		Y[m,n] = √((2l+1)/4π) * dj_θ[m,n] * cis(m*ϕ)
 	end
 	return Y
 end
 
-function YSH_fill!(Y::AbstractMatrix{<:Complex},YSH::AbstractVector{<:Complex},
-	l::Integer,m_range::AbstractUnitRange=axes(Y,1))
-
-	@assert(!isempty(intersect(m_range,axes(Y,1))),
-		"Y is not large enough to contain m range $m_range."*
-		" Axes of Y is $(axes(Y)) and l=$l, m=$m_range")
-
-	@assert(length(YSH)>=SphericalHarmonics.sizeY(l),
-		"YSH does not contain all (l,m)."*
-		"Axes of YSH is $(axes(YSH)) and l=$l, m=$m_range")
-
-	@inbounds for m in m_range
-		Y[m,0] = YSH[index_y(l,m)]
-	end
-end
-
-function Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},
-	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...)
-
-	YSH = SphericalHarmonics.allocate_y(l)
-	Ylmatrix!(T,Y,YSH,l,(θ,ϕ);kwargs...,compute_Ylm=true,compute_Pl=true)
-end
-
-function Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},
-	YSH::AbstractVector{<:Complex},
-	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};
-	kwargs...)
-
-	Plm_cosθ = get(kwargs,:compute_Pl,true) ? compute_p(l,cos(θ)) : nothing
-	
-	Ylmatrix!(T,Y,YSH,l,(θ,ϕ),Plm_cosθ;kwargs...)
-end
-
-function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
-	YSH::AbstractVector{<:Complex},
-	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
-	Plm_cosθ::Vector{<:Real},Pcoeff=nothing;kwargs...)
+function Ylmatrix!(::OSH,YSH::AbstractVector{<:Complex},
+	l::Integer,(θ,ϕ)::Tuple{Real,Real},
+	Plm_cosθ::AbstractVector{<:Real},Pcoeff;kwargs...)
 
 	m_range = get_m_n_ranges(l,OSHindices();kwargs...) |> first
 
-	if get(kwargs,:compute_Pl,true)
-		if isnothing(Pcoeff)
-			Pcoeff = SphericalHarmonics.compute_coefficients(l)
-		end
-		compute_p!(l,cos(θ),Pcoeff,Plm_cosθ)
-	end
+	compute_Pl = get(kwargs,:compute_Pl,true)
+	compute_Ylm = get(kwargs,:compute_Ylm,true)
+	compute_YP!(l,(θ,ϕ),YSH,Plm_cosθ,Pcoeff,compute_Pl,compute_Ylm)
 
-	if get(kwargs,:compute_Ylm,true)
-		compute_y!(l,ϕ,Plm_cosθ,YSH)
-	end
-
-	YSH_fill!(Y,YSH,l,m_range)
-
-	return Y
+	OffsetVector(YSH[index_y(l,m_range)],m_range)
 end
 
-function Ylmatrix!(::OSH,Y::AbstractMatrix{<:Complex},
-	YSH::AbstractVector{<:Complex},
-	l::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},
-	::Nothing;kwargs...)
+Ylmatrix(::GSH,l::Integer,m::IntegerOrUnitRange,n::IntegerOrUnitRange,
+	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
+	Ylmatrix(GSH(),l,(θ,ϕ);kwargs...,
+		m_range=to_unitrange(m),n_range=to_unitrange(n))
 
-	m_range = first(get_m_n_ranges(l,OSHindices();kwargs...))
-	if get(kwargs,:compute_Ylm,true)
-		compute_y!(l,cos(θ),ϕ,YSH)
-	end
-	YSH_fill!(Y,YSH,l,m_range)
-	return Y
-end
+Ylmatrix(::OSH,l::Integer,m::IntegerOrUnitRange,
+	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
+	Ylmatrix(OSH(),l,(θ,ϕ);kwargs...,m_range=to_unitrange(m))
 
-Ylmatrix(T::GSH,l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
-	Ylmatrix(T,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
+Ylmatrix(::GSH,l::Integer,m::IntegerOrUnitRange,n::IntegerOrUnitRange,
+	x::SphericalPoint;kwargs...) = 
+	Ylmatrix(GSH(),l,(x.θ,x.ϕ);kwargs...,
+		m_range=to_unitrange(m),n_range=to_unitrange(n))
 
-Ylmatrix(T::OSH,l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
-	Ylmatrix(T,l,(θ,ϕ);kwargs...,m_range=m:m)
-
-Ylmatrix(T::GSH,l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix(T::OSH,l::Integer,m::Integer,x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
+Ylmatrix(::OSH,l::Integer,m::IntegerOrUnitRange,
+	x::SphericalPoint;kwargs...) = 
+	Ylmatrix(OSH(),l,(x.θ,x.ϕ);kwargs...,
+		m_range=to_unitrange(m))
 
 Ylmatrix(T::AbstractSH,l::Integer,x::SphericalPoint;kwargs...) = 
 	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...)
 
-Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
-	Ylmatrix(T,dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m,n_range=n:n)
+Ylmatrix( ::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
+	m::IntegerOrUnitRange,n::IntegerOrUnitRange,
+	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
+	Ylmatrix(GSH(),dj_θ,l,(θ,ϕ);kwargs...,
+		m_range=to_unitrange(m),n_range=to_unitrange(n))
 
-Ylmatrix(T::OSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real};kwargs...) = 
-	Ylmatrix(T,dj_θ,l,(θ,ϕ);kwargs...,m_range=m:m)
+Ylmatrix( ::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
+	m::IntegerOrUnitRange,n::IntegerOrUnitRange,
+	x::SphericalPoint;kwargs...) = 
+	Ylmatrix(GSH(),dj_θ,l,(x.θ,x.ϕ);kwargs...,
+		m_range=to_unitrange(m),n_range=to_unitrange(n))
 
-Ylmatrix(T::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix(T::OSH,dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...,m_range=m:m)
-
-Ylmatrix(T::AbstractSH,dj_θ::AbstractMatrix{<:Real},l::Integer,x::SphericalPoint;kwargs...) = 
+Ylmatrix( T::AbstractSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
+	x::SphericalPoint;kwargs...) = 
 	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...)
-
-Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(T,Y,dj_θ,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,n::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,m::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m)
-
-Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},l::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,dj_θ,l,(x.θ,x.ϕ),args...;kwargs...)
-
-Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,n::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(T,Y,l,(θ,ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,(θ,ϕ)::Tuple{<:Real,<:Real},args...;kwargs...) = 
-	Ylmatrix!(T,Y,l,(θ,ϕ),args...;kwargs...,m_range=m:m)
-
-Ylmatrix!(T::GSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,n::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m,n_range=n:n)
-
-Ylmatrix!(T::OSH,Y::AbstractMatrix{<:Complex},l::Integer,m::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...,m_range=m:m)
-
-Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},l::Integer,x::SphericalPoint,args...;kwargs...) = 
-	Ylmatrix!(T,Y,l,(x.θ,x.ϕ),args...;kwargs...)
-
-Ylmatrix!(T::AbstractSH,Y::AbstractMatrix{<:Complex},::Nothing,args...;kwargs...) = 
-	Ylmatrix!(T,Y,args...;kwargs...)
 
 ##########################################################################
 # Spherical harmonics
 ##########################################################################
 
 function SphericalHarmonic(args...;kwargs...)
-	Y = Ylmatrix(OSH(),args...;kwargs...)
-	Y[:,0]
-end
-
-function SphericalHarmonic!(Y::AbstractMatrix{<:Complex},args...;kwargs...)
-	Y = Ylmatrix!(OSH(),Y,args...;kwargs...)
-	Y[:,0]
+	Ylmatrix(OSH(),args...;kwargs...)
 end
 
 function SphericalHarmonic!(Y::AbstractVector{<:Complex},args...;kwargs...)
-	Y2D = reshape(Y,axes(Y,1),0:0)
-	SphericalHarmonic!(Y2D,args...;kwargs...)
-	Y2D[:,0]
+	Ylmatrix!(OSH(),Y,args...;kwargs...)
 end
 
 ##########################################################################
@@ -426,489 +341,266 @@ end
 
 ##################################################################################################
 
-# Convenience function to convert an integer to a UnitRange to be used as an array axis
-to_unitrange(a::Integer) = a:a
-to_unitrange(a::AbstractUnitRange) = a
 
-# Only t=0
-function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,β::Integer,γ::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
-	# only t=0
-	if iszero(length(Yℓ₁n₁)) 
-		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁),n_range=β:β)
-	end
-	if iszero(length(Yℓ₂n₂))
-		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂),n_range=γ:γ)
-	end
-	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
-	m_max = min(ℓ₁,ℓ₂) ::Integer
-
-	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s:s,β:β,γ:γ)
-
-	@inbounds for m in -m_max:m_max
-		Yℓ₁ℓ₂n₁n₂[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
-	end
-
-	return Yℓ₁ℓ₂n₁n₂
-end
-
-function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,β::Integer,γ::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};wig3j_fn_ptr=nothing,
-	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
-	# only t=0
-
-	if iszero(length(Yℓ₁n₁)) 
-		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁),n_range=β:β) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-	if iszero(length(Yℓ₂n₂))
-		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂),n_range=γ:γ) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-	m_max = min(ℓ₁,ℓ₂)
-
-	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_intersection = intersect(s_range,s_valid_range)
-
-	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,β:β,γ:γ)
-
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	@inbounds for m in -m_max:m_max
-		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
-
-		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
-		
-		@inbounds for s in s_intersection
-			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
-		end
-	end
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
-	end
-
-	return Yℓ₁ℓ₂n₁n₂
-end
-
-function BiPoSH_s0(ℓ₁,ℓ₂,s::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
-
-	# only t=0
-	if iszero(length(Yℓ₁n₁))
-		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-
-	if iszero(length(Yℓ₂n₂)) 
-		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-
-	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied")
-	m_max = min(ℓ₁,ℓ₂)
-
-	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s:s,-1:1,-1:1)
-
-	@inbounds for (s,β,γ) in Iterators.product(axes(Yℓ₁ℓ₂n₁n₂)...),m in -m_max:m_max
-		Yℓ₁ℓ₂n₁n₂[s,β,γ] += clebschgordan(ℓ₁,m,ℓ₂,-m,s,0)*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
-	end
-
-	return Yℓ₁ℓ₂n₁n₂
-end
-
-function BiPoSH_s0(ℓ₁,ℓ₂,s_range::AbstractRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real};wig3j_fn_ptr=nothing,
-	Yℓ₁n₁=zeros(0:-1,0:-1),Yℓ₂n₂=zeros(0:-1,0:-1))
-
-	if iszero(length(Yℓ₁n₁))
-		Yℓ₁n₁ = Ylmatrix(GSH(),ℓ₁,(θ₁,ϕ₁)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-
-	if iszero(length(Yℓ₂n₂)) 
-		Yℓ₂n₂ = Ylmatrix(GSH(),ℓ₂,(θ₂,ϕ₂)) :: OffsetArray{ComplexF64,2,Array{ComplexF64,2}}
-	end
-
-	m_max = min(ℓ₁,ℓ₂)
-
-	s_valid_range = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_intersection = intersect(s_valid_range,s_range)
-
-	Yℓ₁ℓ₂n₁n₂ = zeros(ComplexF64,s_intersection,-1:1,-1:1)
-
-	lib = nothing
-
-	if isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	@inbounds  for m in -m_max:m_max
-		CG = CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂;wig3j_fn_ptr=wig3j_fn_ptr)
-
-		s_intersection = intersect(axes(Yℓ₁ℓ₂n₁n₂,1),axes(CG,1))
-
-		@inbounds for (s,β,γ) in Iterators.product(s_intersection,axes(Yℓ₁ℓ₂n₁n₂)[2:3]...)
-			Yℓ₁ℓ₂n₁n₂[s,β,γ] += CG[s]*Yℓ₁n₁[m,β]*Yℓ₂n₂[-m,γ]
-		end
-	end
-
-	if !isnothing(lib)
-		Libdl.dlclose(lib)
-	end
-
-	return Yℓ₁ℓ₂n₁n₂
-end
-
-BiPoSH_s0(ℓ₁,ℓ₂,s,β::Integer,γ::Integer,
-	x::SphericalPoint,x2::SphericalPoint;kwargs...) = 
-	BiPoSH_s0(ℓ₁,ℓ₂,s,β,γ,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
-
-BiPoSH_s0(ℓ₁,ℓ₂,s,x::SphericalPoint,x2::SphericalPoint;kwargs...) = 
-	BiPoSH_s0(ℓ₁,ℓ₂,s,(x.θ,x.ϕ),(x2.θ,x2.ϕ);kwargs...)
-
-# Any t
-
-struct BSH{TSH<:SHModeRange,N,AA<:AbstractArray{ComplexF64,N}} <: AbstractArray{ComplexF64,N}
-	modes :: TSH
-	parent :: AA
-end
-
-function BSH(st_iterator::SHModeRange;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1)
-
-	β,γ = to_unitrange.((β,γ))
-	BSH(st_iterator,zeros(ComplexF64,length(st_iterator),β,γ))
-end
-
-function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer,
-	arr::AbstractArray{ComplexF64,3}) where {T<:SHModeRange}
-
-	st_iterator = T(smin,smax,tmin,tmax)
-	BSH(st_iterator,arr)
-end
-
-function BSH{T}(smin::Integer,smax::Integer,tmin::Integer,tmax::Integer;
-	kwargs...) where {T<:SHModeRange}
-
-	st_iterator = T(smin,smax,tmin,tmax)
-	BSH(st_iterator;kwargs...)
-end
-
-BSH{T}(s_range::AbstractUnitRange,t_range::AbstractUnitRange;kwargs...) where {T<:SHModeRange} = 
-	BSH{T}(minimum(s_range),maximum(s_range),minimum(t_range),maximum(t_range);kwargs...)
-
-BSH{T}(s_range::AbstractUnitRange,t::Integer;kwargs...) where {T<:SHModeRange} = 
-	BSH{T}(minimum(s_range),maximum(s_range),t,t;kwargs...)
-
-BSH{T}(s::Integer,t_range::AbstractUnitRange;kwargs...) where {T<:SHModeRange} = 
-	BSH{T}(s,s,minimum(t_range),maximum(t_range);kwargs...)
-
-BSH{T}(s::Integer,t::Integer;kwargs...) where {T<:SHModeRange} = BSH{T}(s,s,t,t;kwargs...)
-
-Base.similar(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(s_range(b),t_range(b),axes(parent(b))[2:3]...)
-Base.copy(b::BSH{T}) where {T<:SHModeRange} = BSH{T}(modes(b),copy(parent(b)))
-
-modes(b::BSH) = b.modes
-
-modeindex(b::BSH,s,t) = modeindex(modes(b),s,t)
-modeindex(b::BSH,::Colon,::Colon) = axes(parent(b),1)
-
-s_range(b::BSH) = s_range(modes(b))
-t_range(b::BSH) = t_range(modes(b))
-
-Base.parent(b::BSH) = b.parent
-
-Base.size(b::BSH) = size(parent(b))
-Base.size(b::BSH,d) = size(parent(b),d)
-Base.axes(b::BSH) = axes(parent(b))
-Base.axes(b::BSH,d) = axes(parent(b),d)
-
-Base.view(b::BSH,args...) = BSH(modes(b),view(parent(b),args...))
-Base.view(b::BSH{T,1},s,t) where {T<:SHModeRange} = 
-	BSH(modes(b),view(parent(b),modeindex(b,s,t)))
-
-function Base.getindex(b::BSH,s::Integer,t::Integer,args...)
-	stind = modeindex(b,s,t)
-	parent(b)[stind,args...]
-end
-
-# This method is necessary in case we are using 1D views for a constant t
-Base.getindex(b::BSH{st,1},s::Integer) = parent(b)[s]
-# This method is necessary in case we are using 1D views for a constant s
-Base.getindex(b::BSH{ts,1},t::Integer) = parent(b)[t]
-
-Base.getindex(b::BSH,::Colon,args...) = parent(b)[:,args...]
-
-function Base.setindex!(b::BSH,x,s::Integer,t::Integer,args...)
-	stind = modeindex(b,s,t)
-	parent(b)[stind,args...] = x
-end
-
-Base.setindex!(b::BSH,x,::Colon,args...) = parent(b)[:,args...] = x
-
-# This method is necessary in case we are using 1D views for a constant t
-Base.setindex!(b::BSH{st,1},x,s::Integer) = parent(b)[s] = x
-# This method is necessary in case we are using 1D views for a constant s
-Base.setindex!(b::BSH{ts,1},x,t::Integer) = parent(b)[t] = x
-
-Base.fill!(b::BSH,x) = fill!(parent(b),x)
-
-s_valid_range(b::BSH,t::Integer) = s_valid_range(modes(b),t)
-t_valid_range(b::BSH,s::Integer) = t_valid_range(modes(b),s)
-
-function Base.show(io::IO, b::BSH)
-    compact = get(io, :compact, false)
-
-    smin = b.modes.smin
-    smax = b.modes.smax
-    tmin = b.modes.tmin
-    tmax = b.modes.tmax
-    β_range = convert(UnitRange{Int64},axes(parent(b),2))
-    γ_range = convert(UnitRange{Int64},axes(parent(b),3))
-
-    println("s=$smin:$smax and t=$tmin:$tmax, vector indices β=$β_range and γ=$γ_range")
-    display(parent(b))
-end
-
-function Base.show(io::IO, ::MIME"text/plain", b::BSH)
-	println("Bipolar spherical harmonic in the Phinney-Burridge basis")
-    show(io, b)  
-end
-
-# BiPoSH Yℓ₁ℓ₂st(n₁,n₂)
+# BiPoSH Yℓ₁ℓ₂LM(n₁,n₂)
 # methods for ordinary and generalized spherical harmonics
 
-# Fall back to the generalized SH by default
-BiPoSH(args...;kwargs...) = BiPoSH(GSH(),args...;kwargs...)
-BiPoSH!(args...;kwargs...) = BiPoSH!(GSH(),args...;kwargs...)
-
-function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	β::Integer,γ::Integer)
-
-	Yℓ₁ℓ₂n₁n₂ = BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(θ₁,ϕ₁),(θ₂,ϕ₂),β:β,γ:γ)
-	Yℓ₁ℓ₂n₁n₂[s,t,β,γ]
+function allocate_Y₁Y₂(::OSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	ll′max = max(lmax,l′max)
+	allocate_Y₁Y₂(OSH(),ll′max)
 end
-
-function BiPoSH(ASH::GSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	β::AbstractUnitRange=-1:1,
-	γ::AbstractUnitRange=-1:1)
-	
-	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
-	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
-
+function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
+	YSH_n₁ = SphericalHarmonics.allocate_y(lmax)
+	YSH_n₂ = SphericalHarmonics.allocate_y(lmax)
+	coeff = SphericalHarmonics.compute_coefficients(lmax)
+	P = SphericalHarmonics.allocate_p(lmax)
+	return YSH_n₁,YSH_n₂,P,coeff
+end
+function allocate_Y₁Y₂(::GSH,ℓ₁,ℓ₂;β=-1:1,γ=-1:1,kwargs...)
 	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
 	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
-
 	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
 	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
-
-	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β=β,γ=γ)
-
-	BiPoSH!(GSH(),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,
-		β=β,γ=γ,
-		compute_dℓ₁=true,compute_dℓ₂=true,
-		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
+end
+function allocate_Y₁Y₂(::GSH,lmax::Integer;β=-1:1,γ=-1:1,kwargs...)
+	Yℓ₁n₁ = zeros(ComplexF64,-lmax:lmax,β)
+	Yℓ₂n₂ = zeros(ComplexF64,-lmax:lmax,γ)
+	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
+	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
+	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
+end
+function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ;β=-1:1,γ=-1:1,kwargs...)
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	ll′max = max(lmax,l′max)
+	allocate_Y₁Y₂(GSH(),ll′max,β=β,γ=γ)
 end
 
-function BiPoSH(::OSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real};
-	β::AbstractUnitRange=0:0,
-	γ::AbstractUnitRange=0:0)
+function SHModes_slice(SHModes::SHM,ℓ′,ℓ) where {SHM<:SHModeRange}
+	l_SHModes = l_range(SHModes)
+	m_SHModes = m_range(SHModes)
+	l_range_ℓ′ℓ = intersect(abs(ℓ-ℓ′):ℓ+ℓ′,l_SHModes)
+	m_range_ℓ′ℓ = -maximum(l_range_ℓ′ℓ):maximum(l_range_ℓ′ℓ)
+	m_range_ℓ′ℓ = intersect(m_range_ℓ′ℓ,m_SHModes)
+	SHM(l_range_ℓ′ℓ,m_range_ℓ′ℓ)
+end
+
+function allocate_BSH(::OSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) where {SHM<:SHModeRange}
+	T = SHVector{ComplexF64,Vector{ComplexF64},Tuple{SHM}}
+	Yℓ′ℓ = SHVector{T}(undef,ℓ′ℓ_smax)
+	for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+		modes_section = SHModes_slice(SHModes,ℓ′,ℓ)
+		Yℓ′ℓ[ind] = T(zeros(ComplexF64,length(modes_section)),
+						(modes_section,),(1,))
+	end
+	return Yℓ′ℓ
+end
+
+function allocate_BSH(::GSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) where {SHM<:SHModeRange}
+	β = get(kwargs,:β,-1:1)
+	γ = get(kwargs,:γ,-1:1)
+	T = SHArray{ComplexF64,3,OffsetArray{ComplexF64,3,Array{ComplexF64,3}},
+			Tuple{SHM,typeof(β),typeof(γ)},1}
+	Yℓ′ℓ = SHVector{T}(undef,ℓ′ℓ_smax)	
+	for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+		modes_section = SHModes_slice(SHModes,ℓ′,ℓ)
+		Yℓ′ℓ[ind] = T(zeros(ComplexF64,length(modes_section),β,γ),
+			(modes_section,β,γ),(1,))
+	end
+	return Yℓ′ℓ
+end
+
+function allocate_BSH(ASH::AbstractSH,ℓ_range::AbstractUnitRange,
+	SHModes::SHModeRange;kwargs...)
+
+	ℓ′ℓ_smax = L₂L₁Δ(ℓ_range,SHModes)
+	allocate_BSH(ASH,ℓ′ℓ_smax,SHModes)
+end
+
+function BiPoSH(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer;
+	β::Union{AbstractUnitRange,Integer}=-1:1,
+	γ::Union{AbstractUnitRange,Integer}=-1:1)
 	
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
-	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,0:0)
-	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,0:0)
+	β,γ = map(to_unitrange,(β,γ))
 
-	YSH1 = SphericalHarmonics.compute_y(ℓ₁,cos(θ₁),ϕ₁)
-	YSH2 = SphericalHarmonics.compute_y(ℓ₂,cos(θ₂),ϕ₂)
+	Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂ = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
 
-	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s:s,t:t,β=0:0,γ=0:0)
+	Yℓ₁ℓ₂n₁n₂ = SHArray(LM(s:s,t:t),β,γ)
 
-	BiPoSH!(OSH(),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Yℓ₁n₁,Yℓ₂n₂,YSH1,YSH2,
-		compute_Yℓ₁=false,compute_Yℓ₂=false,
+	BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,
+		Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,β=β,γ=γ,
+		compute_dℓ₁=true,compute_dℓ₂=true,
 		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+
+	Yℓ₁ℓ₂n₁n₂[1,β,γ]
 end
 
-BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s::Integer,t::Integer,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH(ASH,ℓ₁,ℓ₂,s,t,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+function BiPoSH(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer)
+	
+	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 
-function BiPoSH(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	args...;t = -maximum(s_range):maximum(s_range),kwargs...)
+	Yℓ₁ℓ₂n₁n₂ = SHVector(LM(s:s,t:t))
 
-	SHModes = st(s_range,t)
-	BiPoSH(ASH,ℓ₁,ℓ₂,SHModes,args...;kwargs...)
+	BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,
+		allocate_Y₁Y₂(OSH(),max(ℓ₁,ℓ₂))...,compute_Y₁=true,compute_Y₂=true)
+
+	Yℓ₁ℓ₂n₁n₂[1]
 end
 
-function BiPoSH(::GSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},args...;
+function BiPoSH(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,args...;
 	β::Union{Integer,AbstractUnitRange}=-1:1,
 	γ::Union{Integer,AbstractUnitRange}=-1:1,
 	kwargs...)
 
 	β,γ = to_unitrange.((β,γ))
 
-	if (β==0:0) && (γ==0:0)
-		# Fall back to the faster ordinary BSH
-		return BiPoSH(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,args...;kwargs...)
-	end
+	modes_section = SHModes_slice(SHModes,ℓ₁,ℓ₂)
+	B = SHArray(modes_section,β,γ)
 
-	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
-	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
-
-	BiPoSH!(GSH(),ℓ₁,ℓ₂,SHModes,x1,x2,Yℓ₁n₁,Yℓ₂n₂,args...;
-		β=β,γ=γ,kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+	BiPoSH!(GSH(),x1,x2,B,ℓ₁,ℓ₂,
+		allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)...,args...;
+		kwargs...,β=β,γ=γ,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
-function BiPoSH(::OSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},args...;
+function BiPoSH(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,
+	args...;kwargs...)
+
+	modes_section = SHModes_slice(SHModes,ℓ₁,ℓ₂)
+	B = SHVector(modes_section)
+
+	BiPoSH!(OSH(),x1,x2,B,ℓ₁,ℓ₂,
+		allocate_Y₁Y₂(OSH(),max(ℓ₁,ℓ₂))...,args...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true)
+end
+
+function BiPoSH(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ,
+	args...;kwargs...) where {SHM<:SHModeRange}
+
+	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
+
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+
+	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,ℓ′ℓ_smax,
+		allocate_Y₁Y₂(ASH,max(l′max,lmax);kwargs...)...,args...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true)
+end
+
+BiPoSH(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHModeRange,ℓ_range::AbstractUnitRange,args...;kwargs...) = 
+	BiPoSH(ASH,SHModes,L₂L₁Δ(ℓ_range,SHModes),args...;kwargs...)
+
+BiPoSH(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH(ASH,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+
+function BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ,args...;kwargs...) where {SHM<:SHModeRange}
+
+	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
+	Yℓ′n₂ℓn₁ = deepcopy(Yℓ′n₁ℓn₂)
+
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+
+	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,
+		allocate_Y₁Y₂(ASH,max(lmax,l′max);kwargs...)...,args...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true)
+end
+
+BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	SHModes::SHM,ℓ_range::AbstractUnitRange,args...;kwargs...) where {SHM<:SHModeRange} = 
+	BiPoSH_n1n2_n2n1(ASH,x1,x2,SHModes,L₂L₁Δ(ℓ_range,SHModes),args...;kwargs...)
+
+BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH_n1n2_n2n1(ASH,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+
+# For one (ℓ,ℓ′) just unpack the x1,x2 into (θ,ϕ) and and call BiPoSH_compute!
+# These methods compute the monopolar YSH and pass them on to BiPoSH_compute!
+function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	B::AbstractVector,SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,
+	YSH_n₁::AbstractVector{<:Complex},
+	YSH_n₂::AbstractVector{<:Complex},
+	P::AbstractVector{<:Real},coeff;
+	compute_Y₁=true,compute_Y₂=true,
+	w3j=nothing,CG=nothing,
 	kwargs...)
 
-	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,0:0)
-	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,0:0)
+	compute_Y₁ && compute_YP!(ℓ₁,(θ₁,ϕ₁),YSH_n₁,P,coeff)
+	compute_Y₂ && compute_YP!(ℓ₂,(θ₂,ϕ₂),YSH_n₂,P,coeff)
 
-	BiPoSH!(OSH(),ℓ₁,ℓ₂,SHModes,x1,x2,Yℓ₁n₁,Yℓ₂n₂,args...;
-		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,β=0:0,γ=0:0)
+	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
+	
+	Yℓ₁n₁ = OffsetVector(@view(YSH_n₁[index_y(ℓ₁)]),-ℓ₁:ℓ₁)
+	Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[index_y(ℓ₂)]),-ℓ₂:ℓ₂)
+	BiPoSH_compute!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
+		Yℓ₁n₁,Yℓ₂n₂;kwargs...,w3j=w3j,CG=CG)
 end
 
+@inline BiPoSH!(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	B::SHVector,ℓ₁::Integer,args...;kwargs...) = 
+	BiPoSH!(OSH(),x1,x2,B,shmodes(B),ℓ₁,args...;kwargs...)
 
+function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	B::AbstractArray{<:Complex,3},
+	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,
+	Yℓ₁n₁::AbstractMatrix{<:Complex},
+	Yℓ₂n₂::AbstractMatrix{<:Complex},
+	dℓ₁n₁::AbstractMatrix{<:Real},
+	dℓ₂n₂::AbstractMatrix{<:Real},args...;
+	compute_Y₁=true,compute_Y₂=true,
+	β::Union{AbstractUnitRange,Integer}=-1:1,
+	γ::Union{AbstractUnitRange,Integer}=-1:1,
+	w3j=nothing,CG=nothing,kwargs...)
 
-function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	args...;t=-maximum(s_range):maximum(s_range),kwargs...)
+	β,γ = map(to_unitrange,(β,γ))
 
-	SHModes = st(s_range,t)
-	BiPoSH!(ASH,ℓ₁,ℓ₂,SHModes,args...;kwargs...)
+	compute_Y₁ && Ylmatrix!(GSH(),Yℓ₁n₁,dℓ₁n₁,ℓ₁,(θ₁,ϕ₁))
+	compute_Y₂ && Ylmatrix!(GSH(),Yℓ₂n₂,dℓ₂n₂,ℓ₂,(θ₂,ϕ₂))
+
+	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
+
+	BiPoSH_compute!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
+		Yℓ₁n₁,Yℓ₂n₂,args...;kwargs...,w3j=w3j,CG=CG)
 end
 
-function BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁,Yℓ₂n₂,args...;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1,
-	kwargs...)
+@inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	B::SHArrayFirstAxis,ℓ₁::Integer,args...;kwargs...) = 
+	BiPoSH!(GSH(),x1,x2,B,shmodes(B),ℓ₁,args...;kwargs...)
 
-	β,γ = to_unitrange.((β,γ))
-
-	BiPoSH_compute!(ASH,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
-end
-
-function BiPoSH!(ASH::AbstractSH,B::BSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	args...;t = -maximum(s_range):maximum(s_range),kwargs...)
-
-	SHModes = st(s_range,t)
-	BiPoSH!(ASH,B,ℓ₁,ℓ₂,SHModes,args...;kwargs...)
-end
-
-function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHModes::T,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁,Yℓ₂n₂,args...;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1,
-	kwargs...) where {T<:SHModeRange}
-
-	β,γ = to_unitrange.((β,γ))
-
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
-end
-
-function BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁,Yℓ₂n₂,args...;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1,
-	kwargs...) where {T<:SHModeRange}
-
-	β,γ = to_unitrange.((β,γ))
-
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,modes(B),(θ₁,ϕ₁),(θ₂,ϕ₂),
-		Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
-end
-
-BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH!(ASH,ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH!(ASH,ℓ₁,ℓ₂,SHModes,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH!(ASH::AbstractSH,B::BSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
-	BiPoSH!(ASH,B,ℓ₁,ℓ₂,s_range,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,SHModes::T,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) where {T<:SHModeRange} = 
-	BiPoSH!(ASH,B,ℓ₁,ℓ₂,SHModes,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-
-BiPoSH!(ASH::AbstractSH,B::BSH{T},ℓ₁::Integer,ℓ₂::Integer,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) where {T<:SHModeRange} = 
-	BiPoSH!(ASH,B,ℓ₁,ℓ₂,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
+@inline BiPoSH!(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
+	BiPoSH!(ASH,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
 """
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,args...;kwargs...)
-
+	BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
+	SHModes::SHModeRange,ℓ′ℓ_smax::L₂L₁Δ,args...;kwargs...)
 	Compute BiPoSH for a range in ℓ and ℓ′
 """
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ′n₁::AbstractMatrix{<:Complex},
-	Yℓn₂::AbstractMatrix{<:Complex},
-	YSH_n1=nothing,YSH_n2=nothing,
-	P=nothing,coeff=nothing;
+function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
+	ℓ′ℓ_smax::L₂L₁Δ,
+	YSH_n₁::AbstractVector{<:Complex},
+	YSH_n₂::AbstractVector{<:Complex},
+	P::AbstractVector{<:Real},coeff;
 	CG=nothing,w3j=nothing,
 	wig3j_fn_ptr=nothing,
-	compute_Yℓ₁n₁=false,compute_Yℓ₂n₂=false)
+	compute_Y₁=true,compute_Y₂=true)
 
-	lmax = maximum(s_range(ℓ′ℓ_smax))
-	l′max = maximum(s′_range(ℓ′ℓ_smax))
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
 
-	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
-		# Precompute the spherical harmonics
-		if isnothing(coeff)
-			coeff = SphericalHarmonics.compute_coefficients(l′max)
-		end
-		if isnothing(P)
-			P = SphericalHarmonics.allocate_p(l′max)
-		end
-
-		if compute_Yℓ₁n₁
-			compute_p!(l′max,cos(θ₁),coeff,P)
-			if isnothing(YSH_n1)
-				YSH_n1 = SphericalHarmonics.allocate_y(l′max)
-			end
-			compute_y!(l′max,ϕ₁,P,YSH_n1)
-		end
-
-		if compute_Yℓ₂n₂
-			compute_p!(lmax,cos(θ₂),coeff,P)
-			if isnothing(YSH_n2)
-				YSH_n2 = SphericalHarmonics.allocate_y(lmax)
-			end
-			compute_y!(lmax,ϕ₂,P,YSH_n2)
-		end
-	end
+	compute_Y₁ && compute_YP!(l′max,(θ₁,ϕ₁),YSH_n₁,P,coeff)
+	compute_Y₂ && compute_YP!(lmax,(θ₂,ϕ₂),YSH_n₂,P,coeff)
 
 	lib = nothing
 
@@ -917,25 +609,15 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	if isnothing(w3j)
-		w3j = zeros(lmax+l′max+1)
-	end
-	if isnothing(CG)
-		CG = zeros(0:lmax+l′max)
-	end
+	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
-	@inbounds for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	@inbounds for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
-		outputarr = OffsetArray(reshape(
-					view(Yℓ′n₁ℓn₂,:,ind),axes(SHModes,1),1,1),
-						axes(SHModes,1),0:0,0:0)
-
-		B = BSH(SHModes,outputarr)
-		BiPoSH!(OSH(),B,
-			ℓ′,ℓ,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),
-			Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
-			CG=CG,w3j=w3j,β=0:0,γ=0:0,
-			wig3j_fn_ptr=wig3j_fn_ptr)
+		BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),
+			Yℓ′n₁ℓn₂[ℓ′ℓind],shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),
+			ℓ′,ℓ,YSH_n₁,YSH_n₂,P,coeff;
+			CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+			compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 	end
 
 	!isnothing(lib) && Libdl.dlclose(lib)
@@ -943,97 +625,42 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
 	return Yℓ′n₁ℓn₂
 end
 
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
-	args...;kwargs...)
+@inline BiPoSH!(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::SHVector{<:SHVector},
+	Y1::AbstractVector{<:Complex},args...;kwargs...) = 
+	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ′ℓ_smax,SHModes,args...;kwargs...)
-end
+@inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayFirstAxis},
+	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
+	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},
-	ℓ_range,SHModes::SHModeRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
-	
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ_range,SHModes,
-		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-end
-
-function BiPoSH(::OSH,ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	args...;kwargs...)
-
-	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
-
-	lmax = maximum(s_range(ℓ′ℓ_smax))
-	l′max = maximum(s′_range(ℓ′ℓ_smax))
-
-	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
-	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
-
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,ℓ′ℓ_smax,SHModes,x1,x2,Yℓ′n₁,Yℓn₂,args...;
-		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
-end
-
-function BiPoSH(::OSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
-	args...;kwargs...)
-
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes)
-	BiPoSH(OSH(),ℓ′ℓ_smax,SHModes,args...;kwargs...)
-end
 
 """
-
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
-	ℓ_range::AbstractUnitRange,SHModes::SHModeRange,args...;kwargs...)
-
+	BiPoSH!(OSH(),Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
+	Yℓ′n₂ℓn₁::AbstractVector{<:SHVector},
+	SHModes::SHModeRange,ℓ′ℓ_smax::L₂L₁Δ,args...;kwargs...)
 	Compute BiPoSH for a range in ℓ and ℓ′ by switching the two points
 	Returns Yℓ′n₁ℓn₂ and Yℓ′n₂ℓn₁
 """
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
-	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ′n₁::AbstractMatrix{<:Complex},
-	Yℓn₁::AbstractMatrix{<:Complex},
-	Yℓ′n₂::AbstractMatrix{<:Complex},
-	Yℓn₂::AbstractMatrix{<:Complex},
-	YSH_n1=nothing,YSH_n2=nothing,
-	P=nothing,coeff=nothing;
+function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::AbstractVector{<:SHVector},
+	Yℓ′n₂ℓn₁::AbstractVector{<:SHVector},
+	ℓ′ℓ_smax::L₂L₁Δ,
+	YSH_n₁::AbstractVector{<:Complex},
+	YSH_n₂::AbstractVector{<:Complex},
+	P::AbstractVector{<:Real},coeff;
 	CG=nothing,w3j=nothing,
 	wig3j_fn_ptr=nothing,
-	compute_Yℓ₁n₁=true,
-	compute_Yℓ₂n₂=true)
+	compute_Y₁=true,
+	compute_Y₂=true)
 
-	lmax = maximum(s_range(ℓ′ℓ_smax))
-	l′max = maximum(s′_range(ℓ′ℓ_smax))
-	l_highest = max(l′max,lmax)
+	lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	ll′max = max(lmax,l′max)
 
-	if compute_Yℓ₁n₁ || compute_Yℓ₂n₂
-		# Precompute the spherical harmonics
-		if isnothing(coeff)
-			coeff = SphericalHarmonics.compute_coefficients(l_highest)
-		end
-		if isnothing(P)
-			P = SphericalHarmonics.allocate_p(l_highest)
-		end
-
-		if compute_Yℓ₁n₁
-			compute_p!(l_highest,cos(θ₁),coeff,P)
-			if isnothing(YSH_n1)
-				YSH_n1 = SphericalHarmonics.allocate_y(l_highest)
-			end
-			compute_y!(l_highest,ϕ₁,P,YSH_n1)
-		end
-
-		if compute_Yℓ₂n₂
-			compute_p!(l_highest,cos(θ₂),coeff,P)
-			if isnothing(YSH_n2)
-				YSH_n2 = SphericalHarmonics.allocate_y(l_highest)
-			end
-			compute_y!(l_highest,ϕ₂,P,YSH_n2)
-		end
-	end
+	compute_Y₁ && compute_YP!(ll′max,(θ₁,ϕ₁),YSH_n₁,P,coeff)
+	compute_Y₂ && compute_YP!(ll′max,(θ₂,ϕ₂),YSH_n₂,P,coeff)
 
 	lib = nothing
 
@@ -1042,24 +669,16 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	if isnothing(w3j)
-		w3j = zeros(lmax+l′max+1)
-	end
-	if isnothing(CG)
-		CG = zeros(0:lmax+l′max)
-	end
+	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+
+	@views begin
 
 	@inbounds for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
 
-		Yℓ′n₁ℓn₂_st = OffsetArray(reshape(
-						view(Yℓ′n₁ℓn₂,:,indℓ′ℓ),axes(SHModes,1),1,1),
-							axes(SHModes,1),0:0,0:0)
-
-		Yℓ′n₂ℓn₁_st = OffsetArray(reshape(
-					view(Yℓ′n₂ℓn₁,:,indℓ′ℓ),axes(SHModes,1),1,1),
-						axes(SHModes,1),0:0,0:0)
+		Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[indℓ′ℓ]
+		Yℓ′n₂ℓn₁_st = Yℓ′n₂ℓn₁[indℓ′ℓ]
 
 		# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
 		# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
@@ -1072,188 +691,68 @@ function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁
 			# presented above
 
 			indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
+			Yℓn₁ℓ′n₂_st = Yℓ′n₁ℓn₂[indℓℓ′]
+			Yℓn₂ℓ′n₁_st = Yℓ′n₂ℓn₁[indℓℓ′]
 
-			Yℓn₁ℓ′n₂_st = OffsetArray(reshape(
-						view(Yℓ′n₁ℓn₂,:,indℓℓ′),axes(SHModes,1),1,1),
-							axes(SHModes,1),0:0,0:0)
-
-			Yℓn₂ℓ′n₁_st = OffsetArray(reshape(
-					view(Yℓ′n₂ℓn₁,:,indℓℓ′),axes(SHModes,1),1,1),
-						axes(SHModes,1),0:0,0:0)
-
-			for (indst,(s,t)) in enumerate(SHModes)
-				Yℓ′n₂ℓn₁_st[indst,0,0] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst,0,0]
-				Yℓ′n₁ℓn₂_st[indst,0,0] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst,0,0]
+			for (indst,(s,t)) in enumerate(shmodes(Yℓ′n₂ℓn₁_st))
+				Yℓ′n₂ℓn₁_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst]
+				Yℓ′n₁ℓn₂_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst]
 			end
-
 		else
 			# Default case, where we need to evaluate both
 
-			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₂ℓn₁_st),
-				ℓ′,ℓ,(θ₂,ϕ₂),(θ₁,ϕ₁),
-				Yℓ′n₂,Yℓn₁,YSH_n2,YSH_n1;
-				CG=CG,w3j=w3j,β=0:0,γ=0:0,
-				wig3j_fn_ptr=wig3j_fn_ptr)
+			BiPoSH!(OSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
+				YSH_n₂,YSH_n₁,P,coeff;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 
-			BiPoSH!(OSH(),BSH(SHModes,Yℓ′n₁ℓn₂_st),
-				ℓ′,ℓ,(θ₁,ϕ₁),(θ₂,ϕ₂),
-				Yℓ′n₁,Yℓn₂,YSH_n1,YSH_n2;
-				CG=CG,w3j=w3j,β=0:0,γ=0:0,
-				wig3j_fn_ptr=wig3j_fn_ptr)
+			BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
+				YSH_n₁,YSH_n₂,P,coeff;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 		end
-
 	end
+
+	end # views
 
 	!isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
 
-function BiPoSH!(::OSH,Yℓ′n₁ℓn₂::Matrix{ComplexF64},Yℓ′n₂ℓn₁::Matrix{ComplexF64},
-	ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
-	x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...)
-	
-	BiPoSH!(OSH(),Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax,SHModes,
-		(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
-end
+@inline BiPoSH!(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::SHVector{<:SHVector},Yℓ′n₂ℓn₁::SHVector{<:SHVector},
+	Y1::AbstractVector{<:Complex},args...;kwargs...) = 
+	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
-function BiPoSH_n1n2_n2n1(ASH::AbstractSH,ℓ_range::AbstractUnitRange,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	args...;kwargs...)
+@inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayFirstAxis},
+	Yℓ′n₂ℓn₁::SHVector{<:SHArrayFirstAxis},
+	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
+	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
-	ℓ′ℓ_smax = s′s(ℓ_range,SHModes.smax)
-	BiPoSH_n1n2_n2n1(ASH,ℓ′ℓ_smax,SHModes,x1,x2,args...;kwargs...)
-end
 
-function BiPoSH_n1n2_n2n1(ASH::AbstractSH,ℓ′ℓ_smax::s′s,SHModes::SHModeRange,
-	x1::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	x2::Union{Tuple{<:Real,<:Real},<:SphericalPoint},
-	args...;kwargs...)
-
-	Yℓ′n₁ℓn₂ = zeros(ComplexF64,length(SHModes),length(ℓ′ℓ_smax))
-	Yℓ′n₂ℓn₁ = similar(Yℓ′n₁ℓn₂); fill!(Yℓ′n₂ℓn₁,0)
-
-	lmax = maximum(s_range(ℓ′ℓ_smax))
-	l′max = maximum(s′_range(ℓ′ℓ_smax))
-
-	Yℓ′n₁ = zeros(ComplexF64,-l′max:l′max,0:0)
-	Yℓn₂ = zeros(ComplexF64,-lmax:lmax,0:0)
-
-	Yℓ′n₂ = similar(Yℓ′n₁); fill!(Yℓ′n₂,0)
-	Yℓn₁ = similar(Yℓn₂); fill(Yℓn₁,0)
-
-	BiPoSH!(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax,SHModes,
-		x1,x2,Yℓ′n₁,Yℓn₁,Yℓ′n₂,Yℓn₂,args...;
-		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
-
-	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,ℓ′ℓ_smax
-end
 
 # The actual functions that do the calculation for one pair of (ℓ₁,ℓ₂) and 
 # (θ₁,ϕ₁) and (θ₂,ϕ₂). The BiPoSH! functions call these.
-
-function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,s_range::AbstractUnitRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
-	β::AbstractUnitRange=-1:1,
-	γ::AbstractUnitRange=-1:1,
-	t_range::AbstractUnitRange=-last(s_range):last(s_range),
-	args...;kwargs...)
-
-	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_range = intersect(s_ℓ₁ℓ₂,s_range)
-	t_range = intersect(-maximum(s_range):maximum(s_range),t_range)
-
-	Yℓ₁ℓ₂n₁n₂ = BSH{st}(s_range,t_range,β=β,γ=γ)
-
-	BiPoSH_compute!(ASH,Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,s_range,(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,
-		β,γ,t_range,args...;kwargs...)
-end
-
-function BiPoSH_compute!(ASH::AbstractSH,ℓ₁::Integer,ℓ₂::Integer,SHModes::SHModeRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
-	β::AbstractUnitRange=-1:1,
-	γ::AbstractUnitRange=-1:1,
-	args...;kwargs...)
-
-	B = BSH(SHModes,zeros(ComplexF64,axes(SHModes,1),β,γ))
-
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,SHModes,(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,
-		β,γ,args...;kwargs...)
-end
-
-function BiPoSH_compute!(ASH::AbstractSH,B::BSH{st},ℓ₁::Integer,ℓ₂::Integer,
-	s::AbstractUnitRange,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁::AbstractArray,Yℓ₂n₂::AbstractArray,
-	β::AbstractUnitRange=-1:1,
-	γ::AbstractUnitRange=-1:1,
-	t::AbstractUnitRange=-maximum(s):maximum(s),
-	args...;kwargs...)
-
-	T = typeof(modes(B))
-	BiPoSH_compute!(ASH,B,ℓ₁,ℓ₂,T(s,t),
-	(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁n₁,Yℓ₂n₂,β,γ,args...;kwargs...)
-end
-
-function BiPoSH_compute!(ASH::AbstractSH,
-	Yℓ₁ℓ₂n₁n₂::BSH{st},ℓ₁::Integer,ℓ₂::Integer,
-	stmodes::st,
-	(θ₁,ϕ₁)::Tuple{<:Real,<:Real},
-	(θ₂,ϕ₂)::Tuple{<:Real,<:Real},
-	Yℓ₁n₁::AbstractMatrix{<:Complex},
-	Yℓ₂n₂::AbstractMatrix{<:Complex},
-	β::AbstractUnitRange=-1:1,
-	γ::AbstractUnitRange=-1:1,
-	dℓ₁θ_or_Yl₁m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing,
-	dℓ₂θ_or_Yl₂m::Union{Nothing,AbstractVecOrMat{<:Number}}=nothing;
+# We assume that the monopolar YSH are already computed in the BiPoSH! calls
+function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ₁ℓ₂n₁n₂::AbstractArray{<:Number,3},
+	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
+	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number};
+	β::AbstractUnitRange=-1:1,γ::AbstractUnitRange=-1:1,
 	CG=nothing,w3j=nothing,
 	compute_dℓ₁=true,compute_dℓ₂=true,
 	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
-	compute_Yℓ₁=true,compute_Yℓ₂=true,
 	wig3j_fn_ptr=nothing)
 
-	if compute_Yℓ₁n₁
-		if isa(ASH,GSH)
+	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 
-			Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁θ_or_Yl₁m,ℓ₁,(θ₁,ϕ₁),n_range=β,
-			compute_d_matrix = !isnothing(dℓ₁θ_or_Yl₁m) && compute_dℓ₁)
-
-		elseif isa(ASH,OSH)
-
-			Ylmatrix!(ASH,Yℓ₁n₁,dℓ₁θ_or_Yl₁m,ℓ₁,(θ₁,ϕ₁),n_range=0:0,
-			compute_Ylm = !isnothing(dℓ₁θ_or_Yl₁m) && compute_Yℓ₁)
-
-		end
-	end
-	if compute_Yℓ₂n₂ 
-		if isa(ASH,GSH)
-			
-			Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂θ_or_Yl₂m,ℓ₂,(θ₂,ϕ₂),n_range=γ,
-			compute_d_matrix = !isnothing(dℓ₂θ_or_Yl₂m) && 
-			compute_dℓ₂ && (dℓ₂θ_or_Yl₂m !== dℓ₁θ_or_Yl₁m))
-
-		elseif isa(ASH,OSH)
-
-			Ylmatrix!(ASH,Yℓ₂n₂,dℓ₂θ_or_Yl₂m,ℓ₂,(θ₂,ϕ₂),n_range=0:0,
-			compute_Ylm = !isnothing(dℓ₂θ_or_Yl₂m) && compute_Yℓ₂)
-
-		end
-	end
-
-	fill!(Yℓ₁ℓ₂n₁n₂,zero(ComplexF64))
-
-	s_ℓ₁ℓ₂ = abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂
-	s_valid = intersect(s_ℓ₁ℓ₂,s_range(stmodes),s_range(Yℓ₁ℓ₂n₁n₂))
-	t_valid = intersect(-maximum(s_valid):maximum(s_valid),
-		t_range(stmodes),t_range(Yℓ₁ℓ₂n₁n₂))
-	β_valid = intersect(β,axes(parent(Yℓ₁ℓ₂n₁n₂),2))
-	γ_valid = intersect(γ,axes(parent(Yℓ₁ℓ₂n₁n₂),3))
+	lm_modes = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
+	l_valid = l_range(lm_modes)
+	m_valid = m_range(lm_modes)
+	β_valid = intersect(β,axes(Yℓ₁ℓ₂n₁n₂,2))
+	γ_valid = intersect(γ,axes(Yℓ₁ℓ₂n₁n₂,3))
 
 	lib = nothing
 
@@ -1262,12 +761,7 @@ function BiPoSH_compute!(ASH::AbstractSH,
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	if isnothing(w3j)
-		w3j = zeros(ℓ₁+ℓ₂+1)
-	end
-	if isnothing(CG)
-		CG = zeros(abs(ℓ₁-ℓ₂):ℓ₁+ℓ₂)
-	end
+	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
 
 	@inbounds for γ in γ_valid
 		
@@ -1277,29 +771,24 @@ function BiPoSH_compute!(ASH::AbstractSH,
 			
 			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
 			
-			Yℓ₁ℓ₂n₁n₂βγ = view(Yℓ₁ℓ₂n₁n₂,:,β,γ)
-			
-			@inbounds for t in t_valid
+			@inbounds for m in m_valid
 				
-				Yℓ₁ℓ₂n₁n₂βγt = view(Yℓ₁ℓ₂n₁n₂βγ,:,t)
+				lrange_m = l_range(Yℓ₁ℓ₂n₁n₂,m)
+				lrange_m_valid = intersect(lrange_m,l_valid)
 				
-				srange_t = s_valid_range(Yℓ₁ℓ₂n₁n₂,t)
-				srange_t_valid = intersect(srange_t,s_valid)
-				
-				@inbounds for m in -ℓ₁:ℓ₁
+				@inbounds for m₁ in -ℓ₁:ℓ₁
 		
-					n = t - m
-					if abs(n) > ℓ₂
+					m₂ = m - m₁
+					if abs(m₂) > ℓ₂
 						continue
 					end
 
-					CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+					CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
-					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m]*Yℓ₂n₂γ[n]
+					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
 
-					@inbounds for s in srange_t_valid
-						s_ind = searchsortedfirst(srange_t,s)
-						Yℓ₁ℓ₂n₁n₂βγt[s_ind] += CG[s]*Yℓ₁n₁βYℓ₂n₂γ
+					@inbounds for l in lrange_m_valid
+						Yℓ₁ℓ₂n₁n₂[(l,m),β,γ] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
 					end
 				end
 			end
@@ -1313,7 +802,59 @@ function BiPoSH_compute!(ASH::AbstractSH,
 	return Yℓ₁ℓ₂n₁n₂
 end
 
+function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
+	Yℓ₁ℓ₂n₁n₂::AbstractVector{<:Number},
+	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
+	Yℓ₁n₁::AbstractVector{<:Number},
+	Yℓ₂n₂::AbstractVector{<:Number};
+	w3j=nothing,CG=nothing,wig3j_fn_ptr=nothing)
+
+	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
+
+	lm_modes = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
+	l_valid = l_range(lm_modes)
+	m_valid = m_range(lm_modes)
+
+	lib = nothing
+
+	if isnothing(wig3j_fn_ptr)
+		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
+	end
+
+	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
+			
+	@inbounds for m in m_valid
+		
+		lrange_m = l_range(lm_modes,m)
+		lrange_m_valid = intersect(lrange_m,l_valid)
+		
+		@inbounds for m₁ in -ℓ₁:ℓ₁
+			m₂ = m - m₁
+			abs(m₂) > ℓ₂ && continue
+
+			CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+
+			@inbounds for ℓ in lrange_m_valid
+				Yℓ₁ℓ₂n₁n₂[(ℓ,m)] += CG[ℓ]*Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
+			end
+		end
+	end
+
+	!isnothing(lib) && Libdl.dlclose(lib)
+
+	return Yℓ₁ℓ₂n₁n₂
+end
+
 ##################################################################################################
+
+@inline allocate_w3j_and_CG(l₁,l₂,::Nothing,::Nothing) = (zeros(l₁+l₂+1),zeros(0:l₁+l₂))
+
+@inline allocate_w3j_and_CG(l₁,l₂,w3j,::Nothing) = (w3j,zeros(0:l₁+l₂))
+
+@inline allocate_w3j_and_CG(l₁,l₂,::Nothing,CG) = (zeros(l₁+l₂+1),CG)
+
+@inline allocate_w3j_and_CG(l₁,l₂,w3j,CG) = (w3j,CG)
 
 function Wigner3j(j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 	
@@ -1392,35 +933,34 @@ function Wigner3j!(w3j,j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 	end
 end
 
-function CG_ℓ₁mℓ₂nst(ℓ₁,m,ℓ₂,t=0;wig3j_fn_ptr=nothing)
-	n = t-m
-	smin = max(abs(ℓ₁-ℓ₂),abs(t))
+# Computes the Clebsch-Gordan coefficient C_{ℓ₁m₁ℓ₂m₂}^{ℓm} for all valid ℓ
+function CG_ℓ₁mℓ₂nst(ℓ₁,m₁,ℓ₂,m=0;wig3j_fn_ptr=nothing)
+	m₂ = m-m₁
+	smin = max(abs(ℓ₁-ℓ₂),abs(m))
 	smax = ℓ₁ + ℓ₂
-	w3j = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
+	w3j = Wigner3j(ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
 	CG = OffsetArray(w3j[1:(smax-smin+1)],smin:smax)
-	CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+	CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG;wig3j_fn_ptr=nothing)
-	n = t-m
-	w3j = Wigner3j(ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
-	CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
+function CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG;wig3j_fn_ptr=nothing)
+	m₂ = m-m₁
+	w3j = Wigner3j(ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
+	CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 	return CG
 end
 
-function CG_ℓ₁mℓ₂nst!(ℓ₁,m,ℓ₂,t,CG,w3j;wig3j_fn_ptr=nothing)
-	n = t-m
-	smin = max(abs(ℓ₁-ℓ₂),abs(t))
+function CG_ℓ₁mℓ₂nst!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=nothing)
+	m₂ = m-m₁
+	smin = max(abs(ℓ₁-ℓ₂),abs(m))
 	smax = ℓ₁ + ℓ₂
-	Wigner3j!(w3j,ℓ₁,ℓ₂,m,n;wig3j_fn_ptr=wig3j_fn_ptr)
+	Wigner3j!(w3j,ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
 	@inbounds for (ind,s) in enumerate(smin:smax)
-		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂+t)
+		CG[s] = w3j[ind]*√(2s+1)*(-1)^(ℓ₁-ℓ₂+m)
 	end
 	return CG
 end
-
-include("./precompile.jl")
 
 end
 
