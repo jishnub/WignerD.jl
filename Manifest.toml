@@ -112,7 +112,9 @@ uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.3"
 
 [[OffsetArrays]]
-git-tree-sha1 = "27f32af4e7b11f5aa9f3cad60b777cd042af149a"
+git-tree-sha1 = "3d99f43942605ef1a9ed37ce99a357261ba495bf"
+repo-rev = "master"
+repo-url = "https://github.com/JuliaArrays/OffsetArrays.jl"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 version = "0.11.3"
 
@@ -176,11 +178,11 @@ version = "0.8.0"
 
 [[SphericalHarmonicArrays]]
 deps = ["OffsetArrays", "Reexport", "SphericalHarmonicModes"]
-git-tree-sha1 = "734da1cdf145f7c2ea139eebac550f3bc2d8a88a"
+git-tree-sha1 = "3222314b7462431cdb586fe41da6eae4e0d363a6"
 repo-rev = "master"
 repo-url = "https://github.com/jishnub/SphericalHarmonicArrays.jl"
 uuid = "9dd28c12-4719-4e7d-b634-e7b733a6d046"
-version = "0.1.0"
+version = "0.2.0"
 
 [[SphericalHarmonicModes]]
 git-tree-sha1 = "ce643854fc8cc366a63abb700753bd9df64edeef"
