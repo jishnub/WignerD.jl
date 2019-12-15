@@ -1,5 +1,6 @@
 module WignerD
 
+using Compat
 using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
 using PointsOnASphere,SphericalHarmonicArrays, SphericalHarmonics
 
@@ -603,7 +604,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -638,7 +639,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -654,7 +655,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 			compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
 	end
 
-	!isnothing(lib) && Libdl.dlclose(lib)
+	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂
 end
@@ -697,7 +698,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -747,7 +748,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	end
 	end # views
 
-	!isnothing(lib) && Libdl.dlclose(lib)
+	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
@@ -771,7 +772,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -824,7 +825,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	end # views
 
-	!isnothing(lib) && Libdl.dlclose(lib)
+	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
@@ -863,7 +864,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -921,7 +922,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -948,7 +949,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 		end
 	end
 
-	!isnothing(lib) && Libdl.dlclose(lib)
+	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ₁ℓ₂n₁n₂
 end
@@ -977,7 +978,7 @@ function Wigner3j(j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -995,7 +996,7 @@ function Wigner3j(j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 			Ref{Int32}),#exitstatus
 		w3j,len, j2, j3, m1, m2,m3, exitstatus)
 
-	if !isnothing(lib)
+	if @compat !isnothing(lib)
 		Libdl.dlclose(lib)
 	end
 
@@ -1017,7 +1018,7 @@ function Wigner3j!(w3j,j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 
 	lib = nothing
 
-	if isnothing(wig3j_fn_ptr)
+	if @compat isnothing(wig3j_fn_ptr)
 		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
@@ -1035,7 +1036,7 @@ function Wigner3j!(w3j,j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 			Ref{Int32}),#exitstatus
 		w3j,len, j2, j3, m1, m2,m3, exitstatus)
 
-	if !isnothing(lib)
+	if @compat !isnothing(lib)
 		Libdl.dlclose(lib)
 	end
 end
