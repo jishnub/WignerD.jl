@@ -1,3 +1,5 @@
+# This file is machine-generated - editing it directly is not advised
+
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
@@ -52,7 +54,7 @@ uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "0.1.0"
 
 [[Distributed]]
-deps = ["LinearAlgebra", "Random", "Serialization", "Sockets"]
+deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[ForwardDiff]]
@@ -73,7 +75,7 @@ uuid = "50ceba7f-c3ee-5a84-a6e8-3ad40456ec97"
 version = "4.0.0"
 
 [[InteractiveUtils]]
-deps = ["LinearAlgebra", "Markdown"]
+deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
 [[LegendrePolynomials]]
@@ -110,11 +112,9 @@ uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
 version = "0.3.3"
 
 [[OffsetArrays]]
-git-tree-sha1 = "3d99f43942605ef1a9ed37ce99a357261ba495bf"
-repo-rev = "master"
-repo-url = "https://github.com/JuliaArrays/OffsetArrays.jl"
+git-tree-sha1 = "87d0a91efe29352d5caaa271ae3927083c096e33"
 uuid = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
-version = "0.11.3"
+version = "0.11.4"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -176,11 +176,9 @@ version = "0.8.0"
 
 [[SphericalHarmonicArrays]]
 deps = ["OffsetArrays", "Reexport", "SphericalHarmonicModes"]
-git-tree-sha1 = "3222314b7462431cdb586fe41da6eae4e0d363a6"
-repo-rev = "master"
-repo-url = "https://github.com/jishnub/SphericalHarmonicArrays.jl"
+git-tree-sha1 = "8d478570f05f9c483f1dba10bc15307b5f0602f6"
 uuid = "9dd28c12-4719-4e7d-b634-e7b733a6d046"
-version = "0.2.0"
+version = "0.2.1"
 
 [[SphericalHarmonicModes]]
 git-tree-sha1 = "ce643854fc8cc366a63abb700753bd9df64edeef"
@@ -226,7 +224,7 @@ uuid = "30578b45-9adc-5946-b283-645ec420af67"
 version = "0.4.0"
 
 [[UUIDs]]
-deps = ["Random"]
+deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [[Unicode]]
