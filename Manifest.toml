@@ -176,9 +176,9 @@ version = "0.8.0"
 
 [[SphericalHarmonicArrays]]
 deps = ["OffsetArrays", "Reexport", "SphericalHarmonicModes"]
-git-tree-sha1 = "8d478570f05f9c483f1dba10bc15307b5f0602f6"
+git-tree-sha1 = "c5b35b2626178e4d319a0abed71b77c07aba82fd"
 uuid = "9dd28c12-4719-4e7d-b634-e7b733a6d046"
-version = "0.2.1"
+version = "0.2.2"
 
 [[SphericalHarmonicModes]]
 git-tree-sha1 = "ce643854fc8cc366a63abb700753bd9df64edeef"
