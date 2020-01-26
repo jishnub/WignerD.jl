@@ -36,7 +36,7 @@ function coeffi!(j,A::Matrix{ComplexF64})
 	A[1,2]=-X(j,-j+1)/2im
     A[N,N-1]=X(j,-j+1)/2im
 
-    @inbounds for i in 2:N-1
+    for i in 2:N-1
 	    A[i,i+1]=-X(j,-j+i)/2im
 	    A[i,i-1]=X(j,j-i+2)/2im
 	end
@@ -84,7 +84,7 @@ function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
 	# check if symmetry conditions allow the index to be evaluated
 	inds_covered = falses(m_range,n_range)
 
-	@inbounds for (m,n) in Iterators.product(m_range,n_range)
+	for (m,n) in Iterators.product(m_range,n_range)
 
 		inds_covered[m,n] && continue
 
@@ -267,7 +267,7 @@ function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Re
 		djmatrix!(dj_θ,l,θ,args...;kwargs...,m_range=m_range,n_range=n_range)
 	end
 
-	@inbounds for n in n_range,m in m_range
+	for n in n_range,m in m_range
 		Y[m,n] = √((2l+1)/4π) * dj_θ[m,n] * cis(m*ϕ)
 	end
 	return Y
@@ -611,7 +611,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
-	@inbounds for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
 			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
@@ -646,7 +646,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
-	@inbounds for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
 			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
@@ -707,7 +707,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	@views begin
 
-	@inbounds for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
 
@@ -781,7 +781,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	@views begin
 
-	@inbounds for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
 
@@ -871,20 +871,20 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
 
-	@inbounds for γ in γ_valid
+	for γ in γ_valid
 		
 		Yℓ₂n₂γ = @view Yℓ₂n₂[:,γ]
 
-		@inbounds for β in β_valid
+		for β in β_valid
 			
 			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
 
-			@inbounds for m in m_valid
+			for m in m_valid
 				
 				lrange_m = l_range(Yℓ₁ℓ₂n₁n₂,m)
 				first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
 				
-				@inbounds for m₁ in -ℓ₁:ℓ₁
+				for m₁ in -ℓ₁:ℓ₁
 		
 					m₂ = m - m₁
 					if abs(m₂) > ℓ₂
@@ -895,7 +895,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
 
-					@inbounds for (ind,l) in enumerate(lrange_m)
+					for (ind,l) in enumerate(lrange_m)
 						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
 						Yℓ₁ℓ₂n₁n₂[l_ind,β,γ] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
 					end
@@ -929,12 +929,12 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
 			
-	@inbounds for m in m_valid
+	for m in m_valid
 		
 		lrange_m = l_range(lm_modes,m)
 		first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
 		
-		@inbounds for m₁ in -ℓ₁:ℓ₁
+		for m₁ in -ℓ₁:ℓ₁
 			m₂ = m - m₁
 			abs(m₂) > ℓ₂ && continue
 
@@ -942,7 +942,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 
 			Yℓ₁n₁m₁Yℓ₂n₂m₂ = Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
 
-			@inbounds for (ind,l) in enumerate(lrange_m)
+			for (ind,l) in enumerate(lrange_m)
 				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
 				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁m₁Yℓ₂n₂m₂
 			end
@@ -1064,7 +1064,7 @@ function CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=nothi
 	lmin = max(abs(ℓ₁-ℓ₂),abs(m))
 	lmax = ℓ₁ + ℓ₂
 	Wigner3j!(w3j,ℓ₁,ℓ₂,m₁,m₂;wig3j_fn_ptr=wig3j_fn_ptr)
-	@inbounds for (ind,l) in enumerate(lmin:lmax)
+	for (ind,l) in enumerate(lmin:lmax)
 		CG[l] = w3j[ind]*√(2l+1)*(-1)^(ℓ₁-ℓ₂+m)
 	end
 	return CG
