@@ -204,11 +204,10 @@ end
 end
 
 @testset "BiPoSH ℓrange 2pt" begin
+	
 	n1 = Point2D(π/2,0);
 	n2 = Point2D(π/2,π/3);
-	SHModes = LM(0,5);
-	ℓ_range = 0:5;
-	ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+
 	function test_and_print_fail(arr,(ℓ′ℓind,ℓ′,ℓ),match_arr)
 		@test begin 
     		res = arr[ℓ′ℓind] ≈ match_arr
@@ -222,38 +221,86 @@ end
     		res
     	end
 	end
-	@testset "all ℓ′" begin
-	    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
-	    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ_range)
-	    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-		@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-		@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-		@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-	    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-	    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
-	    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),n2,n1,SHModes,ℓ′,ℓ)
-	    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-	    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
-	    	test_and_print_fail(Yℓ′n₁ℓn₂_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-	    	test_and_print_fail(Yℓ′n₂ℓn₁_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
-	    end	    
-	end
 
-    @testset "some ℓ′" begin
-	    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
-	    ℓ′range = l₂_range(ℓ′ℓ)
-	    if length(ℓ′range) > 1
-		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+	@testset "OSH" begin
+		SHModes = LM(0,5);
+		ℓ_range = 0:5;
+		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+
+		@testset "all ℓ′" begin
 		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ_range)
 		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-		    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
-
+			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
 		    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
 		    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
 		    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),n2,n1,SHModes,ℓ′,ℓ)
 		    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-	    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+		    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+		    	test_and_print_fail(Yℓ′n₁ℓn₂_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+		    	test_and_print_fail(Yℓ′n₂ℓn₁_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
 		    end
 		end
-    end
+
+	    @testset "some ℓ′" begin
+		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		    ℓ′range = l₂_range(ℓ′ℓ)
+		    if length(ℓ′range) > 1
+			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+
+			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),n2,n1,SHModes,ℓ′,ℓ)
+			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+		    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+			    end
+			end
+	    end
+	end
+
+	@testset "GSH" begin
+		SHModes = LM(0,5);
+		ℓ_range = 0:5;
+		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+
+		@testset "all ℓ′" begin
+		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ′ℓ)
+		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ_range)
+		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+		    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+		    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+		    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+		    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+		    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+		    	test_and_print_fail(Yℓ′n₁ℓn₂_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+		    	test_and_print_fail(Yℓ′n₂ℓn₁_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+		    end
+		end
+
+	    @testset "some ℓ′" begin
+		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		    ℓ′range = l₂_range(ℓ′ℓ)
+		    if length(ℓ′range) > 1
+			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ′ℓ)
+			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+
+			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+		    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+			    end
+			end
+	    end
+	end
 end

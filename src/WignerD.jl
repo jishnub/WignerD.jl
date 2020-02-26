@@ -146,15 +146,17 @@ struct djindices end
 struct GSHindices end
 struct OSHindices end
 
+vectorinds(j::Int) = iszero(j) ? (0:0) : (-1:1)
+
 function get_m_n_ranges(j,::djindices;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
-	n_range=get(kwargs,:n_range,-j:j)
+	n_range=get(kwargs,:n_range,vectorinds(j))
 	return m_range,n_range
 end
 
 function get_m_n_ranges(j,::GSHindices;kwargs...)
 	m_range=get(kwargs,:m_range,-j:j)
-	n_range=get(kwargs,:n_range,-1:1)
+	n_range=get(kwargs,:n_range,vectorinds(j))
 	return m_range,n_range
 end
 
@@ -358,25 +360,21 @@ function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
 	P = SphericalHarmonics.allocate_p(lmax)
 	return YSH_n₁,YSH_n₂,P,coeff
 end
-function allocate_Y₁Y₂(::GSH,ℓ₁,ℓ₂;β=-1:1,γ=-1:1,kwargs...)
+function allocate_Y₁Y₂(::GSH,ℓ₁,ℓ₂;β=vectorinds(ℓ₁),γ=vectorinds(ℓ₂),kwargs...)
 	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
 	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
 	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
 	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
 	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
 end
-function allocate_Y₁Y₂(::GSH,lmax::Integer;β=-1:1,γ=-1:1,kwargs...)
-	Yℓ₁n₁ = zeros(ComplexF64,-lmax:lmax,β)
-	Yℓ₂n₂ = zeros(ComplexF64,-lmax:lmax,γ)
-	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
-	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
-	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
+function allocate_Y₁Y₂(::GSH,lmax::Integer;kwargs...)
+	allocate_Y₁Y₂(GSH(),lmax,lmax;kwargs...)
 end
-function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ;β=-1:1,γ=-1:1,kwargs...)
+function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
 	ll′max = max(lmax,l′max)
-	allocate_Y₁Y₂(GSH(),ll′max,β=β,γ=γ)
+	allocate_Y₁Y₂(GSH(),ll′max;kwargs...)
 end
 
 function SHModes_slice(SHModes::SHM,ℓ′,ℓ) where {SHM<:SHModeRange}
@@ -510,11 +508,12 @@ function BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Re
 	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
 	Yℓ′n₂ℓn₁ = deepcopy(Yℓ′n₁ℓn₂)
 
-	lmax = maximum(l₁_range(ℓ′ℓ_smax))
-	l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	# lmax = maximum(l₁_range(ℓ′ℓ_smax))
+	# l′max = maximum(l₂_range(ℓ′ℓ_smax))
 
-	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,
-		allocate_Y₁Y₂(ASH,max(lmax,l′max);kwargs...)...,args...;
+	temp_arrs = allocate_Y₁Y₂(ASH,ℓ′ℓ_smax;kwargs...)
+
+	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,temp_arrs...,args...;
 		kwargs...,compute_Y₁=true,compute_Y₂=true)
 end
 
@@ -559,8 +558,8 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	dℓ₁n₁::AbstractMatrix{<:Real},
 	dℓ₂n₂::AbstractMatrix{<:Real},args...;
 	compute_Y₁=true,compute_Y₂=true,
-	β::Union{AbstractUnitRange,Integer}=-1:1,
-	γ::Union{AbstractUnitRange,Integer}=-1:1,
+	β::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₁),
+	γ::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₂),
 	w3j=nothing,CG=nothing,kwargs...)
 
 	β,γ = map(to_unitrange,(β,γ))
@@ -768,7 +767,6 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
-	ll′max = max(lmax,l′max)
 
 	lib = nothing
 
@@ -781,45 +779,47 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	@views begin
 
-	for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	for (ind_j₂j₁,(j₂,j₁)) in enumerate(ℓ′ℓ_smax)
 
 		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
 
-		Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[indℓ′ℓ]
-		Yℓ′n₂ℓn₁_st = Yℓ′n₂ℓn₁[indℓ′ℓ]
+		Pʲ²ʲ¹ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₂j₁]
+		Pʲ²ʲ¹ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₂j₁]
 
-		# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
-		# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
-		# Precomputation of the RHS would have happened if ℓ′<ℓ, 
-		# as the modes are sorted in order of increasing ℓ
+		# We use the relation between the helicity basis components 
+		# Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁)
+		# and Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂)
+		# Precomputation of the RHS would have happened if j₂ < j₁, 
+		# as the modes are sorted in order of increasing j₁
 
-		if (ℓ,ℓ′) in ℓ′ℓ_smax && ℓ′<ℓ
-			# In this case Yℓn₁ℓ′n₂ and Yℓn₂ℓ′n₁ have already been computed
-			# This means we can evaluate Yℓ′n₂ℓn₁ and Yℓ′n₁ℓn₂ using the formulae
+		if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁
+			# In this case Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂) and Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁) have already been computed
+			# This means we can evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
 			# presented above
 
-			indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
-			Yℓn₁ℓ′n₂_st = Yℓ′n₁ℓn₂[indℓℓ′]
-			Yℓn₂ℓ′n₁_st = Yℓ′n₂ℓn₁[indℓℓ′]
+			ind_j₁j₂ = modeindex(ℓ′ℓ_smax,(j₁,j₂))
 
-			for γ in axes(Yℓn₁ℓ′n₂_st,3), β in axes(Yℓn₁ℓ′n₂_st,2)
-				for (indst,(s,t)) in enumerate(shmodes(Yℓ′n₂ℓn₁_st))
-					Yℓ′n₂ℓn₁_st[indst,β,γ] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst,γ,β]
-					Yℓ′n₁ℓn₂_st[indst,β,γ] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst,γ,β]
+			Pʲ¹ʲ²ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₁j₂]
+			Pʲ¹ʲ²ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₁j₂]
+
+			for γ in axes(Pʲ¹ʲ²ₗₘ_n₁n₂,3), β in axes(Pʲ¹ʲ²ₗₘ_n₁n₂,2)
+				for (ind_lm,(l,m)) in enumerate(shmodes(Pʲ¹ʲ²ₗₘ_n₁n₂))
+					Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,β,γ] = (-1)^(j₁+j₂+l) * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,γ,β]
+					Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,β,γ] = (-1)^(j₁+j₂+l) * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,γ,β]
 				end
 			end
 		else
 			# Default case, where we need to evaluate both
 
-			BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
+			BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Pʲ²ʲ¹ₗₘ_n₂n₁,j₂,j₁,
 				Yℓ₂n₂,Yℓ₁n₁,dℓ₂n₂,dℓ₁n₁;
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
+				compute_Y₁=true,compute_Y₂=true)
 
-			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
+			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Pʲ²ʲ¹ₗₘ_n₁n₂,j₂,j₁,
 				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂;
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=(ℓ != ℓ′),compute_Y₂=(ℓ != ℓ′))
+				compute_Y₁=(j₁ != j₂),compute_Y₂=(j₁ != j₂))
 		end
 	end
 
@@ -848,7 +848,7 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	Yℓ₁ℓ₂n₁n₂::AbstractArray{<:Number,3},
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number};
-	β::AbstractUnitRange=-1:1,γ::AbstractUnitRange=-1:1,
+	β::AbstractUnitRange=vectorinds(ℓ₁),γ::AbstractUnitRange=vectorinds(ℓ₂),
 	CG=nothing,w3j=nothing,
 	compute_dℓ₁=true,compute_dℓ₂=true,
 	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
