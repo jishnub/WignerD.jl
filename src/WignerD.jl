@@ -86,6 +86,9 @@ function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
 
 	for (m,n) in Iterators.product(m_range,n_range)
 
+		# check mainly for j=0
+		(abs(m) > j || abs(n) > j) && continue
+
 		inds_covered[m,n] && continue
 
 		dj_m_n = zero(ComplexF64)
@@ -146,23 +149,23 @@ struct djindices end
 struct GSHindices end
 struct OSHindices end
 
-vectorinds(j::Int) = iszero(j) ? (0:0) : (-1:1)
+vectorinds(j::Int) = iszero(j) ? Base.IdentityUnitRange(0:0) : Base.IdentityUnitRange(-1:1)
 
 function get_m_n_ranges(j,::djindices;kwargs...)
-	m_range=get(kwargs,:m_range,-j:j)
-	n_range=get(kwargs,:n_range,vectorinds(j))
+	m_range = get(kwargs,:m_range,Base.IdentityUnitRange(-j:j))
+	n_range = get(kwargs,:n_range,vectorinds(j))
 	return m_range,n_range
 end
 
 function get_m_n_ranges(j,::GSHindices;kwargs...)
-	m_range=get(kwargs,:m_range,-j:j)
-	n_range=get(kwargs,:n_range,vectorinds(j))
+	m_range = get(kwargs,:m_range,Base.IdentityUnitRange(-j:j))
+	n_range = get(kwargs,:n_range,vectorinds(j))
 	return m_range,n_range
 end
 
 function get_m_n_ranges(j,::OSHindices;kwargs...)
-	m_range=get(kwargs,:m_range,-j:j)
-	n_range=0:0
+	m_range = get(kwargs,:m_range,Base.IdentityUnitRange(-j:j))
+	n_range = Base.IdentityUnitRange(0:0)
 	return m_range,n_range
 end
 
@@ -219,8 +222,8 @@ struct OSH <: AbstractSH end # Ordinary SH
 
 # Convenience function to convert an integer to a UnitRange to be used as an array axis
 const IntegerOrUnitRange = Union{Integer,AbstractUnitRange{<:Integer}}
-to_unitrange(a::Integer) = a:a
-to_unitrange(a::AbstractUnitRange{<:Integer}) = a
+to_unitrange(a::Integer) = Base.IdentityUnitRange(a:a)
+to_unitrange(a::AbstractUnitRange{<:Integer}) = Base.IdentityUnitRange(a)
 
 function allocate_YP(::OSH,lmax::Integer)
 	YSH = SphericalHarmonics.allocate_y(lmax)
@@ -351,7 +354,7 @@ function allocate_Y₁Y₂(::OSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
 	ll′max = max(lmax,l′max)
-	allocate_Y₁Y₂(OSH(),ll′max)
+	allocate_Y₁Y₂(OSH(),ll′max;kwargs...)
 end
 function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
 	YSH_n₁ = SphericalHarmonics.allocate_y(lmax)
@@ -367,7 +370,7 @@ function allocate_Y₁Y₂(::GSH,ℓ₁,ℓ₂;β=vectorinds(ℓ₁),γ=vectorin
 	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
 	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
 end
-function allocate_Y₁Y₂(::GSH,lmax::Integer;kwargs...)
+@inline function allocate_Y₁Y₂(::GSH,lmax::Integer;kwargs...)
 	allocate_Y₁Y₂(GSH(),lmax,lmax;kwargs...)
 end
 function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
@@ -398,12 +401,20 @@ function allocate_BSH(::OSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) w
 end
 
 function allocate_BSH(::GSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) where {SHM<:SHModeRange}
-	β = get(kwargs,:β,-1:1)
-	γ = get(kwargs,:γ,-1:1)
+
+	ℓ′,ℓ = first(ℓ′ℓ_smax)
+
+	# Need to evaluate all components to be able to swap them in the recursion
+	β = Base.IdentityUnitRange(-1:1)
+	γ = Base.IdentityUnitRange(-1:1)
+
 	T = SHArray{ComplexF64,3,OffsetArray{ComplexF64,3,Array{ComplexF64,3}},
-			Tuple{SHM,typeof(β),typeof(γ)},1}
+			Tuple{SHM,Base.IdentityUnitRange,Base.IdentityUnitRange},1}
+
 	Yℓ′ℓ = SHVector{T}(undef,ℓ′ℓ_smax)	
+
 	for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
 		modes_section = SHModes_slice(SHModes,ℓ′,ℓ)
 		Yℓ′ℓ[ind] = T(zeros(ComplexF64,length(modes_section),β,γ),
 			(modes_section,β,γ),(1,))
@@ -420,24 +431,24 @@ end
 
 function BiPoSH(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
 	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer;
-	β::Union{AbstractUnitRange,Integer}=-1:1,
-	γ::Union{AbstractUnitRange,Integer}=-1:1)
+	β::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₁),
+	γ::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₂))
 	
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
 	β,γ = map(to_unitrange,(β,γ))
 
-	Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂ = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
+	temp_arrs = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
 
-	Yℓ₁ℓ₂n₁n₂ = SHArray(LM(s:s,t:t),β,γ)
+	Yℓ₁ℓ₂n₁n₂ = SHArray(LM(s:s,t:t),Base.IdentityUnitRange(-1:1),Base.IdentityUnitRange(-1:1))
 
 	BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,
-		Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,β=β,γ=γ,
+		temp_arrs...;β=β,γ=γ,
 		compute_dℓ₁=true,compute_dℓ₂=true,
 		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 
-	Yℓ₁ℓ₂n₁n₂[1,β,γ]
+	Yℓ₁ℓ₂n₁n₂[1,:,:]
 end
 
 function BiPoSH(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
@@ -455,17 +466,19 @@ end
 
 function BiPoSH(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,args...;
-	β::Union{Integer,AbstractUnitRange}=-1:1,
-	γ::Union{Integer,AbstractUnitRange}=-1:1,
+	β::Union{Integer,AbstractUnitRange} = vectorinds(ℓ₁),
+	γ::Union{Integer,AbstractUnitRange} = vectorinds(ℓ₂),
 	kwargs...)
 
-	β,γ = to_unitrange.((β,γ))
+	β,γ = map(to_unitrange,(β,γ))
 
 	modes_section = SHModes_slice(SHModes,ℓ₁,ℓ₂)
-	B = SHArray(modes_section,β,γ)
+	B = SHArray(modes_section,Base.IdentityUnitRange(-1:1),Base.IdentityUnitRange(-1:1))
+
+	temp_arrs = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
 
 	BiPoSH!(GSH(),x1,x2,B,ℓ₁,ℓ₂,
-		allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)...,args...;
+		temp_arrs...,args...;
 		kwargs...,β=β,γ=γ,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
@@ -502,19 +515,33 @@ BiPoSH(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 BiPoSH(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
 	BiPoSH(ASH,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
+maybeslice(::OSH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...) = (Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁)
+
+function maybeslice(::GSH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...)
+	β = get(kwargs,:β,Base.IdentityUnitRange(-1:1))
+	γ = get(kwargs,:γ,Base.IdentityUnitRange(-1:1))
+
+	if (β != -1:1) || (γ != -1:1)
+		Yℓ′n₁ℓn₂ = SHVector([SHArray(sa[:,β,γ],(SHModes,),(1,)) for sa in Yℓ′n₁ℓn₂],ℓ′ℓ_smax)
+		Yℓ′n₂ℓn₁ = SHVector([SHArray(sa[:,β,γ],(SHModes,),(1,)) for sa in Yℓ′n₂ℓn₁],ℓ′ℓ_smax)
+	end
+
+	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
+end
+
 function BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ,args...;kwargs...) where {SHM<:SHModeRange}
 
 	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
-	Yℓ′n₂ℓn₁ = deepcopy(Yℓ′n₁ℓn₂)
+	Yℓ′n₂ℓn₁ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
 
-	# lmax = maximum(l₁_range(ℓ′ℓ_smax))
-	# l′max = maximum(l₂_range(ℓ′ℓ_smax))
+	Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂ = allocate_Y₁Y₂(ASH,ℓ′ℓ_smax;kwargs...,β=-1:1,γ=-1:1)
 
-	temp_arrs = allocate_Y₁Y₂(ASH,ℓ′ℓ_smax;kwargs...)
+	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,args...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true,β=-1:1,γ=-1:1)
 
-	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,temp_arrs...,args...;
-		kwargs...,compute_Y₁=true,compute_Y₂=true)
+	# Slicing, if any, happens after the calculation is done
+	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁ = maybeslice(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...)
 end
 
 BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -552,7 +579,8 @@ end
 
 function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
 	B::AbstractArray{<:Complex,3},
-	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,
+	SHModes::SHModeRange,
+	ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractMatrix{<:Complex},
 	Yℓ₂n₂::AbstractMatrix{<:Complex},
 	dℓ₁n₁::AbstractMatrix{<:Real},
@@ -560,17 +588,16 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	compute_Y₁=true,compute_Y₂=true,
 	β::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₁),
 	γ::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₂),
-	w3j=nothing,CG=nothing,kwargs...)
+	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),kwargs...)
 
-	β,γ = map(to_unitrange,(β,γ))
+	β = intersect(to_unitrange(β),vectorinds(ℓ₁))
+	γ = intersect(to_unitrange(γ),vectorinds(ℓ₂))
 
-	compute_Y₁ && Ylmatrix!(GSH(),Yℓ₁n₁,dℓ₁n₁,ℓ₁,(θ₁,ϕ₁))
-	compute_Y₂ && Ylmatrix!(GSH(),Yℓ₂n₂,dℓ₂n₂,ℓ₂,(θ₂,ϕ₂))
-
-	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
+	compute_Y₁ && Ylmatrix!(GSH(),Yℓ₁n₁,dℓ₁n₁,ℓ₁,(θ₁,ϕ₁),n_range=β)
+	compute_Y₂ && Ylmatrix!(GSH(),Yℓ₂n₂,dℓ₂n₂,ℓ₂,(θ₂,ϕ₂),n_range=γ)
 
 	BiPoSH_compute!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
-		Yℓ₁n₁,Yℓ₂n₂,args...;kwargs...,w3j=w3j,CG=CG)
+		Yℓ₁n₁,Yℓ₂n₂,args...;kwargs...,w3j=w3j,CG=CG,β=β,γ=γ)
 end
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -629,7 +656,8 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	Yℓ₂n₂::AbstractMatrix{<:Complex},
 	dℓ₁n₁::AbstractMatrix{<:Real},
 	dℓ₂n₂::AbstractMatrix{<:Real};
-	CG=nothing,w3j=nothing,
+	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
+	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
 	compute_Y₁=true,compute_Y₂=true)
 
@@ -643,7 +671,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+	# w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
 	for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
@@ -683,10 +711,11 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	YSH_n₁::AbstractVector{<:Number},
 	YSH_n₂::AbstractVector{<:Number},
 	P::AbstractVector{<:Real},coeff;
-	CG=nothing,w3j=nothing,
+	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
+	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
 	compute_Y₁=true,
-	compute_Y₂=true)
+	compute_Y₂=true,kwargs...)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -702,7 +731,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+	# w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
 	@views begin
 
@@ -737,12 +766,12 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 			BiPoSH!(OSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
 				YSH_n₂,YSH_n₁,P,coeff;
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
+				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
 
 			BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
 				YSH_n₁,YSH_n₂,P,coeff;
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
+				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
 		end
 	end
 	end # views
@@ -760,10 +789,11 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	Yℓ₂n₂::AbstractMatrix{<:Complex},
 	dℓ₁n₁::AbstractMatrix{<:Real},
 	dℓ₂n₂::AbstractMatrix{<:Real};
-	CG=nothing,w3j=nothing,
+	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
+	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
 	compute_Y₁=true,
-	compute_Y₂=true)
+	compute_Y₂=true,kwargs...)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -775,7 +805,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
 	end
 
-	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+	# w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
 
 	@views begin
 
@@ -786,6 +816,8 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		Pʲ²ʲ¹ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₂j₁]
 		Pʲ²ʲ¹ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₂j₁]
 
+		lm_iter = shmodes(Pʲ²ʲ¹ₗₘ_n₁n₂)
+
 		# We use the relation between the helicity basis components 
 		# Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁)
 		# and Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂)
@@ -794,7 +826,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 		if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁
 			# In this case Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂) and Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁) have already been computed
-			# This means we can evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
+			# This means we may evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
 			# presented above
 
 			ind_j₁j₂ = modeindex(ℓ′ℓ_smax,(j₁,j₂))
@@ -802,22 +834,23 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 			Pʲ¹ʲ²ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₁j₂]
 			Pʲ¹ʲ²ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₁j₂]
 
-			for γ in axes(Pʲ¹ʲ²ₗₘ_n₁n₂,3), β in axes(Pʲ¹ʲ²ₗₘ_n₁n₂,2)
-				for (ind_lm,(l,m)) in enumerate(shmodes(Pʲ¹ʲ²ₗₘ_n₁n₂))
-					Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,β,γ] = (-1)^(j₁+j₂+l) * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,γ,β]
-					Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,β,γ] = (-1)^(j₁+j₂+l) * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,γ,β]
+			for α₂ in vectorinds(j₂), α₁ in vectorinds(j₁)
+				for (ind_lm,(l,m)) in enumerate(lm_iter)
+					phase = (-1)^(j₁+j₂+l)
+					Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,α₁,α₂]
+					Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,α₁,α₂]
 				end
 			end
 		else
 			# Default case, where we need to evaluate both
 
 			BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Pʲ²ʲ¹ₗₘ_n₂n₁,j₂,j₁,
-				Yℓ₂n₂,Yℓ₁n₁,dℓ₂n₂,dℓ₁n₁;
+				Yℓ₂n₂,Yℓ₁n₁,dℓ₂n₂,dℓ₁n₁;kwargs...,
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 				compute_Y₁=true,compute_Y₂=true)
 
 			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Pʲ²ʲ¹ₗₘ_n₁n₂,j₂,j₁,
-				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂;
+				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂;kwargs...,
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 				compute_Y₁=(j₁ != j₂),compute_Y₂=(j₁ != j₂))
 		end
@@ -912,7 +945,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractVector{<:Number},
 	Yℓ₂n₂::AbstractVector{<:Number};
-	w3j=nothing,CG=nothing,wig3j_fn_ptr=nothing)
+	w3j=nothing,CG=nothing,wig3j_fn_ptr=nothing,kwargs...)
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 

@@ -209,14 +209,21 @@ end
 	n2 = Point2D(π/2,π/3);
 
 	function test_and_print_fail(arr,(ℓ′ℓind,ℓ′,ℓ),match_arr)
-		@test begin 
-    		res = arr[ℓ′ℓind] ≈ match_arr
+		@test begin
+			res = false
+			try
+    			res = arr[ℓ′ℓind] ≈ match_arr
+    		catch
+    			@show ℓ ℓ′ axes(arr[ℓ′ℓind]) axes(match_arr)
+    			rethrow()
+    		end
+
     		if !res
-    			println(ℓ′ℓind," ",ℓ′," ",ℓ)
+    			@show (ℓ′ℓind,ℓ′,ℓ)
     			println()
-    			display(arr[ℓ′ℓind])
+    			@show arr[ℓ′ℓind]
     			println()
-    			display(match_arr)
+    			@show match_arr
     		end
     		res
     	end
@@ -267,22 +274,66 @@ end
 		SHModes = LM(0,5);
 		ℓ_range = 0:5;
 		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		
+		function testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			# We test for Yʲ²ʲ¹ₗₘ_α₂α₁_n₂n₁ = (-1)^(j₁+j₂+l) * Yʲ¹ʲ²ₗₘ_α₁α₂_n₁n₂
+	    	for (ℓ′,ℓ) in Iterators.product(ℓ_common,ℓ_common)
+	    		Yℓ′n₁ℓn₂ = Yℓ′n₁ℓn₂_all[(ℓ′,ℓ)]
+	    		Yℓn₂ℓ′n₁ = Yℓ′n₂ℓn₁_all[(ℓ,ℓ′)]
+	    		for (s,t) in shmodes(Yℓ′n₁ℓn₂)
+	    			phase = (-1)^(ℓ′ + ℓ + s)
+	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[(s,t),:,:]
+	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[(s,t),:,:]
+    				@test begin
+    					res = Yℓ′n₁ℓn₂_st ≈ phase .* permutedims(Yℓn₂ℓ′n₁_st)
+    					if !res
+    						@show (s,t) Yℓ′n₁ℓn₂_st Yℓn₂ℓ′n₁_st
+    					end
+    					res
+    				end
+	    		end
+	    	end
+	    end
+
+	    function testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
+	    	@test shmodes(Yℓ′n₁ℓn₂_all) == shmodes(Yℓ′n₁ℓn₂_all_OSH)
+	    	for j₂j₁ind in axes(Yℓ′n₁ℓn₂_all,1)
+	    		YGSH = Yℓ′n₁ℓn₂_all[j₂j₁ind]
+	    		YOSH = Yℓ′n₁ℓn₂_all_OSH[j₂j₁ind]
+	    		@test shmodes(YGSH) == shmodes(YOSH)
+	    		@test YGSH[:,0,0] ≈ YOSH
+	    	end
+	    end
 
 		@testset "all ℓ′" begin
 		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ′ℓ)
 		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ_range)
+		    
+		    @test Yℓ′n₁ℓn₂_all == Yℓ′n₁ℓn₂_all_2
+		    @test Yℓ′n₂ℓn₁_all == Yℓ′n₂ℓn₁_all_2
+
 		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
 			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-		    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-		    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
-		    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
-		    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-		    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
-		    	test_and_print_fail(Yℓ′n₁ℓn₂_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-		    	test_and_print_fail(Yℓ′n₂ℓn₁_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
-		    end
+			@testset "match with B(ℓ′,ℓ)" begin
+			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+			    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+			    end
+			end
+			@testset "match flip" begin
+				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ_common = intersect(ℓ′_range,ℓ_range)
+			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			end
+			@testset "compare with OSH" begin
+			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
+			    testOSH(Yℓ′n₂ℓn₁_all,Yℓ′n₂ℓn₁_all_OSH)
+			end
 		end
 
 	    @testset "some ℓ′" begin
@@ -294,12 +345,24 @@ end
 			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
 
-			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
-			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
-			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
-		    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
-			    end
+			    @testset "match with B(ℓ′,ℓ)" begin
+				    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+				    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+				    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+				    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+			    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+				    end
+				end
+			end
+			@testset "match flip" begin
+				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ_common = intersect(ℓ′_range,ℓ_range)
+			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			end
+			@testset "compare with OSH" begin
+			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
+			    testOSH(Yℓ′n₂ℓn₁_all,Yℓ′n₂ℓn₁_all_OSH)
 			end
 	    end
 	end
