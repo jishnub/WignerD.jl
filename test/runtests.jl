@@ -170,26 +170,96 @@ end
 end
 
 @testset "BiPoSH OSH and GSH" begin
-	n1 = Point2D(π/2,0)
-	n2 = Point2D(π/2,π/3)
-	SHModes = LM(0:1,0:0)
-    B_GSH=BiPoSH(GSH(),n1,n2,SHModes,2,2)
-    B_OSH=BiPoSH(OSH(),n1,n2,SHModes,2,2)
-    @test B_GSH[:,0,0] ≈ B_OSH
+	n1 = Point2D(π/3,0)
+	n2 = Point2D(π/3,π/3)
+	s_max = 20
+	SHModes = LM(0:s_max);
+	for j₁ in 0:20, j₂ in 0:20
+		WignerD.δ(j₁,j₂,s_max) || continue
+	    B_GSH=BiPoSH(GSH(),n1,n2,SHModes,j₂,j₁)
+	    B_OSH=BiPoSH(OSH(),n1,n2,SHModes,j₂,j₁)
+    	@test begin
+    		res = B_GSH[:,0,0] ≈ B_OSH
+    		if !res
+    			@show (j₁,j₂,s_max) B_GSH[:,0,0] B_OSH
+    		end
+    		res
+    	end
+    end
+end
+
+@testset "BiPoSH GSH conjugate" begin
+    n1 = Point2D(π/3,0)
+	n2 = Point2D(π/3,π/3)
+	n1 = Point2D(π/3,0)
+	n2 = Point2D(π/3,π/3)
+
+	@testset "m=0" begin
+		function testconj(l,j₁,j₂)
+		    phase = (-1)^(j₁+j₂+l)
+		    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
+		    for α₂ = -1:1, α₁ = -1:1
+		    	@test begin
+		    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
+		    		if !res
+		    			@show (l,j₁,j₂,α₁,α₂) b[α₁,α₂] b[-α₁,-α₂]
+		    		end
+		    		res
+		    	end
+		    end
+		end
+		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
+			testconj(l,j₁,j₂)
+		end
+	end
+	@testset "m and -m" begin
+	    function testconj(l,m,j₁,j₂)
+		    
+		    phase = (-1)^(j₁+j₂+l+m)
+		    
+		    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
+		    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
+
+		    for α₂ = -1:1, α₁ = -1:1
+		    	@test begin
+		    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
+		    			atol=1e-15, rtol= sqrt(eps(Float64)))
+		    		if !res
+		    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
+		    		end
+		    		res
+		    	end
+		    end
+		end
+		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂, m = -l:l
+			testconj(l,m,j₁,j₂)
+		end
+	end
 end
 
 @testset "BiPoSH ℓrange" begin
-	n1 = Point2D(π/2,0)
-	n2 = Point2D(π/2,π/3)
-	SHModes = LM(0,1,0,0)
+	n1 = Point2D(π/3,0)
+	n2 = Point2D(π/3,π/3)
+	SHModes = LM(0:5)
 	ℓ_range = 1:10
 	ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes)
-    B_all = BiPoSH(OSH(),n1,n2,SHModes,ℓ′ℓ)
 
-    for (ℓ′,ℓ) in ℓ′ℓ
-    	B = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
-    	@test B_all[(ℓ′,ℓ)] ≈ B
-    end
+	@testset "OSH" begin
+	    B_all = BiPoSH(OSH(),n1,n2,SHModes,ℓ′ℓ)
+
+	    for (ℓ′,ℓ) in ℓ′ℓ
+	    	B = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
+	    	@test B_all[(ℓ′,ℓ)] ≈ B
+	    end
+	end
+	@testset "GSH" begin
+	    B_all = BiPoSH(GSH(),n1,n2,SHModes,ℓ′ℓ)
+
+	    for (ℓ′,ℓ) in ℓ′ℓ
+	    	B = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+	    	@test B_all[(ℓ′,ℓ)] ≈ B
+	    end
+	end
 end
 
 @testset "BiPoSH all (l,m) one (l₁,l₂)" begin

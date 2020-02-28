@@ -1,8 +1,15 @@
 module WignerD
 
 using Compat
-using OffsetArrays, WignerSymbols, LinearAlgebra,Libdl
-using PointsOnASphere,SphericalHarmonicArrays, SphericalHarmonics
+using Reexport
+using OffsetArrays
+using LinearAlgebra
+using Libdl
+@reexport using PointsOnASphere
+@reexport using SphericalHarmonics
+@reexport using SphericalHarmonicArrays
+@reexport using WignerSymbols
+@reexport using SphericalHarmonicModes
 
 import SphericalHarmonicArrays: SHArrayOnlyFirstAxis
 import SphericalHarmonicModes: ModeRange, SHModeRange
@@ -882,16 +889,14 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number};
 	β::AbstractUnitRange=vectorinds(ℓ₁),γ::AbstractUnitRange=vectorinds(ℓ₂),
-	CG=nothing,w3j=nothing,
-	compute_dℓ₁=true,compute_dℓ₂=true,
-	compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true,
-	wig3j_fn_ptr=nothing)
+	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),
+	wig3j_fn_ptr=nothing,kwargs...)
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 
-	lm_modes = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
-	l_valid = l_range(lm_modes)
-	m_valid = m_range(lm_modes)
+	lm_modes_ℓ₁ℓ₂ = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
+	l_valid = l_range(lm_modes_ℓ₁ℓ₂)
+	m_valid = m_range(lm_modes_ℓ₁ℓ₂)
 	β_valid = intersect(β,axes(Yℓ₁ℓ₂n₁n₂,2))
 	γ_valid = intersect(γ,axes(Yℓ₁ℓ₂n₁n₂,3))
 
@@ -912,25 +917,50 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 			
 			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
 
+			Yℓ₁ℓ₂n₁n₂βγ = @view Yℓ₁ℓ₂n₁n₂[:,β,γ]
+			Yℓ₁ℓ₂n₁n₂₋β₋γ = @view Yℓ₁ℓ₂n₁n₂[:,-β,-γ]
+
 			for m in m_valid
-				
-				lrange_m = l_range(Yℓ₁ℓ₂n₁n₂,m)
+
+				lrange_m = l_range(lm_modes_ℓ₁ℓ₂,m)
 				first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
+
+				conjcond = -m in m_valid && -γ in γ_valid && -β in β_valid && 
+					-m <= m &&  -γ <= γ && -β <= β && (β != 0 && γ != 0)
+
+				if conjcond
+
+					# In this case we may use the conjugation relations
+					# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
+
+					allmodes_covered = true
+
+					for (ind,l) in enumerate(lrange_m)
+						if (l,-m) ∉ lm_modes
+							allmodes_covered = false
+							continue
+						end
+						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+						l₋mind = modeindex(lm_modes,(l,-m))
+						Yℓ₁ℓ₂n₁n₂βγ[l_ind] = (-1)^(ℓ₁+ℓ₂+l+m+β+γ) * conj(Yℓ₁ℓ₂n₁n₂₋β₋γ[l₋mind])
+					end
+
+					allmodes_covered && continue
+				end
 				
 				for m₁ in -ℓ₁:ℓ₁
 		
 					m₂ = m - m₁
-					if abs(m₂) > ℓ₂
-						continue
-					end
+					abs(m₂) > ℓ₂ && continue
 
 					CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
 					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
 
 					for (ind,l) in enumerate(lrange_m)
+						conjcond && (l,-m) in lm_modes && continue
 						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
-						Yℓ₁ℓ₂n₁n₂[l_ind,β,γ] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
+						Yℓ₁ℓ₂n₁n₂βγ[l_ind] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
 					end
 				end
 			end
@@ -945,11 +975,13 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractVector{<:Number},
 	Yℓ₂n₂::AbstractVector{<:Number};
-	w3j=nothing,CG=nothing,wig3j_fn_ptr=nothing,kwargs...)
+	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),wig3j_fn_ptr=nothing,kwargs...)
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 
-	lm_modes = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
+	lm_modes_ℓ₁ℓ₂ = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
+	l_valid = l_range(lm_modes_ℓ₁ℓ₂)
+	m_valid = m_range(lm_modes_ℓ₁ℓ₂)
 	l_valid = l_range(lm_modes)
 	m_valid = m_range(lm_modes)
 
@@ -964,9 +996,31 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 			
 	for m in m_valid
 		
-		lrange_m = l_range(lm_modes,m)
+		lrange_m = l_range(lm_modes_ℓ₁ℓ₂,m)
 		first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
+
+		conjcond = -m in m_valid && -m < m
 		
+		if conjcond
+
+			# In this case we may use the conjugation relation
+			# Yʲ¹ʲ²ₗ₋ₘ = (-1)^(j₁+j₂+l+m) conj(Yʲ¹ʲ²ₗₘ)
+
+			allmodes_covered = true
+
+			for (ind,l) in enumerate(lrange_m)
+				if (l,-m) ∉ lm_modes
+					allmodes_covered = false
+					continue
+				end
+				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+				l₋mind = modeindex(lm_modes,(l,-m))
+				Yℓ₁ℓ₂n₁n₂[l_ind] = (-1)^(ℓ₁+ℓ₂+l+m) * conj(Yℓ₁ℓ₂n₁n₂[l₋mind])
+			end
+
+			allmodes_covered && continue
+		end
+
 		for m₁ in -ℓ₁:ℓ₁
 			m₂ = m - m₁
 			abs(m₂) > ℓ₂ && continue
@@ -976,6 +1030,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 			Yℓ₁n₁m₁Yℓ₂n₂m₂ = Yℓ₁n₁[m₁]*Yℓ₂n₂[m₂]
 
 			for (ind,l) in enumerate(lrange_m)
+				conjcond && (l,-m) in lm_modes && continue
 				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
 				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁m₁Yℓ₂n₂m₂
 			end
