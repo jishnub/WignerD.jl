@@ -1,6 +1,81 @@
 using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials,
 OffsetArrays,SphericalHarmonics,SphericalHarmonicArrays,Test
 
+@testset "cis" begin
+	@testset "Equator" begin
+	    for α = -10:10
+	    	@test cis(α,Equator()) ≈ cis(α*π/2)
+	    	@test cis(float(α),Equator()) ≈ cis(α*π/2)
+	    end
+	end
+	@testset "North Pole" begin
+	   for α = -10:10
+	    	@test cis(α,NorthPole()) ≈ cis(0)
+	    	@test cis(float(α),NorthPole()) ≈ cis(0)
+	    end
+	end
+	@testset "South Pole" begin
+	   for α = -10:10
+	    	@test cis(α,SouthPole()) ≈ cis(α*π)
+	    	@test cis(float(α),SouthPole()) ≈ cis(α*π)
+	    end
+	end
+end
+
+@testset "djmatrix_terms" begin
+	j = 5
+    λ,v = Jy_eigen(j)
+
+    function testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+    	@test begin 
+    		res = isapprox(dj_m_n,dj_m_n2,atol=1e-14,rtol=sqrt(eps(Float64)))
+    		if !res
+    			@show m n dj_m_n dj_m_n2
+    		end
+    		res
+    	end
+    	@test begin 
+    		res = isapprox(dj_m_n_πmθ,dj_m_n_πmθ2,atol=1e-14,rtol=sqrt(eps(Float64)))
+    		if !res
+    			@show m n dj_m_n_πmθ dj_m_n_πmθ2
+    		end
+    		res
+    	end	
+    	@test begin 
+    		res = isapprox(dj_n_m,dj_n_m2,atol=1e-14,rtol=sqrt(eps(Float64)))
+    		if !res
+    			@show m n dj_n_m dj_n_m2
+    		end
+    		res
+    	end
+    end
+    
+    @testset "Equator" begin
+        for m in -j:j, n in -j:j
+        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(π/2,λ,v,m,n)
+        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(Equator(),λ,v,m,n)
+
+        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        end
+    end
+    @testset "NorthPole" begin
+        for m in -j:j, n in -j:j
+        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(0,λ,v,m,n)
+        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(NorthPole(),λ,v,m,n)
+
+        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        end
+    end
+    @testset "SouthPole" begin
+        for m in -j:j, n in -j:j
+        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(π,λ,v,m,n)
+        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(SouthPole(),λ,v,m,n)
+
+        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        end
+    end
+end
+
 @testset "d1_mn(θ)" begin
 	θ = π*rand()
 	d1 = djmatrix(1,θ)
@@ -69,7 +144,7 @@ end
 	end
 end
 
-@testset "Ylm0" begin
+@testset "Y1m0" begin
 	n = Point2D(π*rand(),2π*rand())
 	@test Ylmatrix(OSH(),1,n) ≈ OffsetArray([√(3/8π)*sin(n.θ)cis(-n.ϕ),
 										√(3/4π)cos(n.θ),
@@ -82,6 +157,23 @@ end
 	Y1 = Ylmatrix(GSH(),ℓ,n)
 	Y2 = Ylmatrix(OSH(),ℓ,n)
 	@test Y1[:,0] ≈ Y2
+end
+
+@testset "Ylmatrix special points" begin
+    @testset "OSH" begin
+        Y1 = Ylmatrix(OSH(),3,(π/2,π/2))
+        Y2 = Ylmatrix(OSH(),3,(Equator(),π/2))
+        Y3 = Ylmatrix(OSH(),3,(Equator(),Piby2()))
+        @test Y1 ≈ Y2
+        @test Y1 ≈ Y3
+    end
+    @testset "GSH" begin
+		Y1 = Ylmatrix(GSH(),3,(π/2,π/2))
+        Y2 = Ylmatrix(GSH(),3,(Equator(),π/2))
+        Y3 = Ylmatrix(GSH(),3,(Equator(),Piby2()))
+        @test Y1 ≈ Y2
+        @test Y1 ≈ Y3
+    end
 end
 
 @testset "Y1100 explicit" begin

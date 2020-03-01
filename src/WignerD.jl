@@ -10,13 +10,55 @@ using Libdl
 @reexport using SphericalHarmonicArrays
 @reexport using WignerSymbols
 @reexport using SphericalHarmonicModes
+import SphericalHarmonics: Pole
 
 import SphericalHarmonicArrays: SHArrayOnlyFirstAxis
 import SphericalHarmonicModes: ModeRange, SHModeRange
 
-export Ylmn,Ylmatrix,Ylmatrix!,djmatrix!,Jy_eigen,
-djmn,djmatrix,BiPoSH,BiPoSH_n1n2_n2n1,BiPoSH!,
-SphericalHarmonic,SphericalHarmonic!,OSH,GSH
+export Ylmn
+export Ylmatrix
+export Ylmatrix!
+export djmatrix!
+export Jy_eigen
+export djmn
+export djmatrix
+export BiPoSH
+export BiPoSH_n1n2_n2n1
+export BiPoSH!
+export SphericalHarmonic
+export SphericalHarmonic!
+export OSH
+export GSH
+export Equator
+
+struct Equator <: Real end
+
+# Returns exp(i α π/2) = cos(α π/2) + i*sin(α π/2)
+function Base.cis(α,::Equator)
+	res = zero(ComplexF64)
+	αmod4 = mod(Int(α),4)
+	if αmod4 == 0
+		res += one(res)
+	elseif αmod4 == 1
+		res += one(res)*im
+	elseif αmod4 == 2
+		res -= one(res)
+	elseif αmod4 == 3
+		res -= one(res)*im
+	end
+	return res
+end
+
+@inline Base.cis(α,::NorthPole) = one(ComplexF64)
+
+# Returns exp(i α π) = cos(α π) + i*sin(α π) = cos(α π)
+function Base.cis(α,::SouthPole)
+	res = one(ComplexF64)
+	if mod(Int(α),2) == 1 
+		res *= -1
+	end
+	res
+end
 
 ##########################################################################
 # Wigner d matrix
@@ -86,57 +128,118 @@ function Jy_eigen!(j,A)
 	return λ,v
 end
 
+function djmatrix_terms(θ::Real,λ,v,m::Integer,n::Integer)
+	dj_m_n = zero(ComplexF64)
+	dj_m_n_πmθ = zero(ComplexF64)
+	dj_n_m = zero(ComplexF64)
+
+	@inbounds for μ in axes(λ,1)
+		temp  = v[μ,m] * conj(v[μ,n])
+
+		dj_m_n += cis(-λ[μ]*θ) * temp
+		if m != n
+			dj_n_m += cis(λ[μ]*θ) * temp
+		end
+		
+		dj_m_n_πmθ += cis(-λ[μ]*(π-θ)) * temp
+	end
+
+	dj_m_n,dj_m_n_πmθ,dj_n_m
+end
+
+function djmatrix_terms(θ::NorthPole,λ,v,m::Integer,n::Integer)
+	dj_m_n = zero(ComplexF64)
+	dj_m_n_πmθ = zero(ComplexF64)
+	dj_n_m = zero(ComplexF64)
+
+	@inbounds for μ in axes(λ,1)
+		temp  = v[μ,m] * conj(v[μ,n])
+
+		dj_m_n += cis(0.0) * temp
+		if m != n
+			dj_n_m += cis(0.0) * temp
+		end
+		
+		dj_m_n_πmθ += cis(-λ[μ],SouthPole()) * temp
+	end
+
+	dj_m_n,dj_m_n_πmθ,dj_n_m
+end
+
+function djmatrix_terms(θ::SouthPole,λ,v,m::Integer,n::Integer)
+	dj_m_n = zero(ComplexF64)
+	dj_m_n_πmθ = zero(ComplexF64)
+	dj_n_m = zero(ComplexF64)
+
+	@inbounds for μ in axes(λ,1)
+		temp  = v[μ,m] * conj(v[μ,n])
+
+		dj_m_n += cis(-λ[μ],SouthPole()) * temp
+		if m != n
+			dj_n_m += cis(λ[μ],SouthPole()) * temp
+		end
+		
+		dj_m_n_πmθ += cis(0.0) * temp
+	end
+
+	dj_m_n,dj_m_n_πmθ,dj_n_m
+end
+
+function djmatrix_terms(θ::Equator,λ,v,m::Integer,n::Integer)
+	dj_m_n = zero(ComplexF64)
+	dj_n_m = zero(ComplexF64)
+
+	@inbounds for μ in axes(λ,1)
+		temp  = v[μ,m] * conj(v[μ,n])
+
+		dj_m_n += cis(-λ[μ],θ) * temp
+		if m != n
+			dj_n_m += cis(λ[μ],θ) * temp
+		end
+	end
+
+	dj_m_n,dj_m_n,dj_n_m
+end
+
 function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v)
+
+	m_range = intersect(m_range,-j:j)
+	n_range = intersect(n_range,-j:j)
 
 	# check if symmetry conditions allow the index to be evaluated
 	inds_covered = falses(m_range,n_range)
 
 	for (m,n) in Iterators.product(m_range,n_range)
 
-		# check mainly for j=0
-		(abs(m) > j || abs(n) > j) && continue
-
 		inds_covered[m,n] && continue
 
-		dj_m_n = zero(ComplexF64)
-		dj_m_n_πmθ = zero(ComplexF64)
-		dj_n_m = zero(ComplexF64)
+		dj_m_n,dj_m_n_πmθ,dj_n_m = map(real,djmatrix_terms(θ,λ,v,m,n))
 
-		@inbounds for μ in axes(λ,1)
-			dj_m_n += cis(-λ[μ]*θ) * v[μ,m] * conj(v[μ,n])
-			if m != n
-				dj_n_m += cis(-λ[μ]*(-θ)) * v[μ,m] * conj(v[μ,n])
-			end
-			
-			dj_m_n_πmθ += cis(-λ[μ]*(π-θ)) * v[μ,m] * conj(v[μ,n])
-			
-		end
-
-		dj[m,n] = real(dj_m_n)
+		dj[m,n] = dj_m_n
 		inds_covered[m,n] = true
 		if !iszero(m) && -m in m_range
-			dj[-m,n] = real(dj_m_n_πmθ)*(-1)^(j+n)
+			dj[-m,n] = dj_m_n_πmθ*(-1)^(j+n)
 			inds_covered[-m,n] = true
 		end
 
 		if !iszero(n) && -n in n_range
-			dj[m,-n] = real(dj_m_n_πmθ)*(-1)^(j+m)
+			dj[m,-n] = dj_m_n_πmθ*(-1)^(j+m)
 			inds_covered[m,-n] = true
 		end
 
 		if !(iszero(m) && iszero(n)) && -m in n_range && -n in m_range
-			dj[-n,-m] = real(dj_m_n)
+			dj[-n,-m] = dj_m_n
 			inds_covered[-n,-m] = true
 		end
 
 		if  !iszero(n) && m !=n && -n in n_range && -m in m_range
-			dj[-m,-n] = (-1)^(n+m) * real(dj_m_n)
+			dj[-m,-n] = (-1)^(n+m) * dj_m_n
 			inds_covered[-m,-n] = true
 		end
 
 		# transpose
 		if m != n && m in n_range && n in m_range
-			dj[n,m] = real(dj_n_m)
+			dj[n,m] = dj_n_m
 			inds_covered[n,m] = true
 		end
 	end
@@ -238,10 +341,24 @@ function allocate_YP(::OSH,lmax::Integer)
 	P = SphericalHarmonics.allocate_p(lmax)
 	return YSH,P,coeff
 end
-function compute_YP!(lmax,(θ,ϕ),Y,P,coeff,
+function compute_YP!(lmax,(θ,ϕ)::Tuple{Real,Real},Y,P,coeff,
 	compute_Pl::Bool=true,compute_Y::Bool=true)
 
-	compute_Pl && compute_p!(lmax,cos(θ),coeff,P)
+	x = cos(θ)
+	compute_Pl && compute_p!(lmax,x,coeff,P)
+	compute_Y && compute_y!(lmax,x,ϕ,P,Y)
+end
+function compute_YP!(lmax,(x,ϕ)::Tuple{Pole,Real},Y,P,coeff,
+	compute_Pl::Bool=true,compute_Y::Bool=true)
+
+	compute_Pl && compute_p!(lmax,x,coeff,P)
+	compute_Y && compute_y!(lmax,x,ϕ,P,Y)
+end
+
+function compute_YP!(lmax,(x,ϕ)::Tuple{Equator,Real},Y,P,coeff,
+	compute_Pl::Bool=true,compute_Y::Bool=true)
+
+	compute_Pl && compute_p!(lmax,0,coeff,P)
 	compute_Y && compute_y!(lmax,ϕ,P,Y)
 end
 
