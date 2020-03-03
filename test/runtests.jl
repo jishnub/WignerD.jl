@@ -163,16 +163,12 @@ end
     @testset "OSH" begin
         Y1 = Ylmatrix(OSH(),3,(π/2,π/2))
         Y2 = Ylmatrix(OSH(),3,(Equator(),π/2))
-        Y3 = Ylmatrix(OSH(),3,(Equator(),Piby2()))
         @test Y1 ≈ Y2
-        @test Y1 ≈ Y3
     end
     @testset "GSH" begin
 		Y1 = Ylmatrix(GSH(),3,(π/2,π/2))
         Y2 = Ylmatrix(GSH(),3,(Equator(),π/2))
-        Y3 = Ylmatrix(GSH(),3,(Equator(),Piby2()))
         @test Y1 ≈ Y2
-        @test Y1 ≈ Y3
     end
 end
 
