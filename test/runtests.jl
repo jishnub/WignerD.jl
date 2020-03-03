@@ -276,51 +276,71 @@ end
     end
 end
 
-@testset "BiPoSH GSH conjugate" begin
+@testset "BiPoSH conjugate" begin
     n1 = Point2D(π/3,0)
 	n2 = Point2D(π/3,π/3)
-	n1 = Point2D(π/3,0)
-	n2 = Point2D(π/3,π/3)
 
-	@testset "m=0" begin
-		function testconj(l,j₁,j₂)
-		    phase = (-1)^(j₁+j₂+l)
-		    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
-		    for α₂ = -1:1, α₁ = -1:1
-		    	@test begin
-		    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
-		    		if !res
-		    			@show (l,j₁,j₂,α₁,α₂) b[α₁,α₂] b[-α₁,-α₂]
-		    		end
-		    		res
+	@testset "OSH" begin
+		@testset "m=0" begin
+		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂
+		    	B = BiPoSH(OSH(),n1,n2,l,0,j₁,j₂)
+		    	if iseven(j₁+j₂+l)
+		    		@test B ≈ real(B)
+		    	else
+		    		@test B ≈ imag(B)*im
 		    	end
 		    end
 		end
-		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
-			testconj(l,j₁,j₂)
+		@testset "m and -m" begin
+		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂, m=-l:l
+		    	Bm = BiPoSH(OSH(),n1,n2,l,m,j₁,j₂)
+		    	B₋m = BiPoSH(OSH(),n1,n2,l,-m,j₁,j₂)
+		    	@test Bm ≈ (-1)^(j₁+j₂+l+m)*conj(B₋m)
+		    end
 		end
 	end
-	@testset "m and -m" begin
-	    function testconj(l,m,j₁,j₂)
-		    
-		    phase = (-1)^(j₁+j₂+l+m)
-		    
-		    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
-		    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
 
-		    for α₂ = -1:1, α₁ = -1:1
-		    	@test begin
-		    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
-		    			atol=1e-15, rtol= sqrt(eps(Float64)))
-		    		if !res
-		    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
-		    		end
-		    		res
-		    	end
-		    end
+	@testset "GSH" begin
+	    @testset "m=0" begin
+			function testconj(l,j₁,j₂)
+			    phase = (-1)^(j₁+j₂+l)
+			    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
+			    for α₂ = -1:1, α₁ = -1:1
+			    	@test begin
+			    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
+			    		if !res
+			    			@show (l,j₁,j₂,α₁,α₂) b[α₁,α₂] b[-α₁,-α₂]
+			    		end
+			    		res
+			    	end
+			    end
+			end
+			for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
+				testconj(l,j₁,j₂)
+			end
 		end
-		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂, m = -l:l
-			testconj(l,m,j₁,j₂)
+		@testset "m and -m" begin
+		    function testconj(l,m,j₁,j₂)
+			    
+			    phase = (-1)^(j₁+j₂+l+m)
+			    
+			    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
+			    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
+
+			    for α₂ = -1:1, α₁ = -1:1
+			    	@test begin
+			    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
+			    			atol=1e-15, rtol= sqrt(eps(Float64)))
+			    		if !res
+			    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
+			    		end
+			    		res
+			    	end
+			    end
+			end
+			for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂, m = -l:l
+				testconj(l,m,j₁,j₂)
+			end
 		end
 	end
 end
