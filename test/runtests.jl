@@ -1,11 +1,16 @@
 using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials,
 OffsetArrays,SphericalHarmonics,SphericalHarmonicArrays,Test
 
-@testset "cis" begin
+@testset "trigonometric functions for special points" begin
 	@testset "Equator" begin
 	    for α = -10:10
 	    	@test cis(α,Equator()) ≈ cis(α*π/2)
 	    	@test cis(float(α),Equator()) ≈ cis(α*π/2)
+	    	@test cos(Equator()) == 0
+	    	@test sin(Equator()) == 1
+	    	@test float(Equator()) == π/2
+	    	@test AbstractFloat(Equator()) == π/2
+	    	@test Float64(Equator()) == π/2
 	    end
 	end
 	@testset "North Pole" begin

@@ -60,6 +60,12 @@ function Base.cis(α,::SouthPole)
 	res
 end
 
+Base.cos(::Equator) = zero(Float64)
+Base.sin(::Equator) = one(Float64)
+
+Base.Float64(::Equator) = π/2
+Base.AbstractFloat(p::Equator) = Float64(p)
+
 ##########################################################################
 # Wigner d matrix
 ##########################################################################
