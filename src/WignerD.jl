@@ -1084,6 +1084,23 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 		end
 	end
 
+	# Specifically for m=0 the (0,0) components are purely real or imaginary
+	if 0 in m_valid && 0 in β_valid && 0 in γ_valid
+		lrange_m = l_range(lm_modes_ℓ₁ℓ₂,0)
+		first_l_ind = modeindex(lm_modes,(first(lrange_m),0))
+
+		for (ind,l) in enumerate(lrange_m)
+			l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+			if isodd(ℓ₁+ℓ₂+l)
+				# in this case the term is purely imaginary
+				Yℓ₁ℓ₂n₁n₂[l_ind,0,0] = Complex(0,imag(Yℓ₁ℓ₂n₁n₂[l_ind,0,0]))
+			else
+				# in this case the term is purely real
+				Yℓ₁ℓ₂n₁n₂[l_ind,0,0] = Complex(real(Yℓ₁ℓ₂n₁n₂[l_ind,0,0]),0)
+			end
+		end
+	end
+
 	return Yℓ₁ℓ₂n₁n₂
 end
 
@@ -1150,6 +1167,20 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 				conjcond && (l,-m) in lm_modes && continue
 				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
 				Yℓ₁ℓ₂n₁n₂[l_ind] += CG[l]*Yℓ₁n₁m₁Yℓ₂n₂m₂
+			end
+		end
+
+		# Specifically for m=0 the values are purely real or imaginary
+		if m == 0
+			for (ind,l) in enumerate(lrange_m)
+				l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+				if isodd(ℓ₁+ℓ₂+l)
+					# in this case the term is purely imaginary
+					Yℓ₁ℓ₂n₁n₂[l_ind] = Complex(0,imag(Yℓ₁ℓ₂n₁n₂[l_ind]))
+				else
+					# in this case the term is purely real
+					Yℓ₁ℓ₂n₁n₂[l_ind] = Complex(real(Yℓ₁ℓ₂n₁n₂[l_ind]),0)
+				end
 			end
 		end
 	end

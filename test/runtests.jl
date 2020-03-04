@@ -285,9 +285,9 @@ end
 		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂
 		    	B = BiPoSH(OSH(),n1,n2,l,0,j₁,j₂)
 		    	if iseven(j₁+j₂+l)
-		    		@test B ≈ real(B)
+		    		@test B == real(B)
 		    	else
-		    		@test B ≈ imag(B)*im
+		    		@test B == imag(B)*im
 		    	end
 		    end
 		end
@@ -314,6 +314,8 @@ end
 			    		res
 			    	end
 			    end
+			    # The (0,0) term is explicitly set for m=0
+			    @test b[0,0] == phase * conj(b[0,0])
 			end
 			for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
 				testconj(l,j₁,j₂)
