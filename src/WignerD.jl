@@ -66,6 +66,8 @@ Base.sin(::Equator) = one(Float64)
 Base.Float64(::Equator) = π/2
 Base.AbstractFloat(p::Equator) = Float64(p)
 
+Base.one(::Type{Equator}) = one(Float64)
+
 ##########################################################################
 # Wigner d matrix
 ##########################################################################
