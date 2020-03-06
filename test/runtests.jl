@@ -1,11 +1,18 @@
 using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials,
 OffsetArrays,SphericalHarmonics,SphericalHarmonicArrays,Test
 
-@testset "cis" begin
+@testset "trigonometric functions for special points" begin
 	@testset "Equator" begin
+		@test one(Equator()) == 1
 	    for α = -10:10
 	    	@test cis(α,Equator()) ≈ cis(α*π/2)
 	    	@test cis(float(α),Equator()) ≈ cis(α*π/2)
+	    	@test cos(Equator()) == 0
+	    	@test sin(Equator()) == 1
+	    	@test csc(Equator()) == 1
+	    	@test float(Equator()) == π/2
+	    	@test AbstractFloat(Equator()) == π/2
+	    	@test Float64(Equator()) == π/2
 	    end
 	end
 	@testset "North Pole" begin
@@ -24,7 +31,8 @@ end
 
 @testset "djmatrix_terms" begin
 	j = 5
-    λ,v = Jy_eigen(j)
+	A = zeros(ComplexF64,2j+1,2j+1)
+    λ,v = WignerD.Jy_eigen!(j,A)
 
     function testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
     	@test begin 
@@ -91,6 +99,41 @@ end
 	@test d1[-1,1] ≈ (1-cos(θ))/2
 	@test d1[-1,0] ≈ sin(θ)/√2
 	@test d1[-1,-1] ≈ (1+cos(θ))/2
+end
+
+@testset "d2_mn(θ)" begin
+	θ = π*rand()
+	d2 = djmatrix(2,θ)
+	
+	@test d2[2,2] ≈ cos(θ/2)^4
+	@test d2[2,1] ≈ -sin(θ)*(1+cos(θ))/2
+	@test d2[2,0] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[2,-1] ≈ -sin(θ)*(1-cos(θ))/2
+	@test d2[2,-2] ≈ sin(θ/2)^4
+	
+	@test d2[1,2] ≈ sin(θ)*(1+cos(θ))/2
+	@test d2[1,1] ≈ (2cos(θ)^2+cos(θ)-1)/2
+	@test d2[1,0] ≈ -√(3/2)*sin(θ)*cos(θ)
+	@test d2[1,-1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
+	@test d2[1,-2] ≈ -sin(θ)*(1-cos(θ))/2
+
+	@test d2[0,2] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[0,1] ≈ √(3/2)*sin(θ)*cos(θ)
+	@test d2[0,0] ≈ 1/2*(3cos(θ)^2-1)
+	@test d2[0,-1] ≈ -√(3/2)*sin(θ)*cos(θ)
+	@test d2[0,-2] ≈ 1/2*√(3/2)*sin(θ)^2
+
+	@test d2[-1,2] ≈ sin(θ)*(1-cos(θ))/2
+	@test d2[-1,1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
+	@test d2[-1,0] ≈ √(3/2)*sin(θ)*cos(θ)
+	@test d2[-1,-1] ≈ (2cos(θ)^2+cos(θ)-1)/2
+	@test d2[-1,-2] ≈ -sin(θ)*(1+cos(θ))/2
+
+	@test d2[-2,2] ≈ sin(θ/2)^4
+	@test d2[-2,1] ≈ sin(θ)*(1-cos(θ))/2
+	@test d2[-2,0] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[-2,-1] ≈ sin(θ)*(1+cos(θ))/2
+	@test d2[-2,-2] ≈ cos(θ/2)^4
 end
 
 @testset "Clebsch-Gordan" begin
@@ -163,16 +206,12 @@ end
     @testset "OSH" begin
         Y1 = Ylmatrix(OSH(),3,(π/2,π/2))
         Y2 = Ylmatrix(OSH(),3,(Equator(),π/2))
-        Y3 = Ylmatrix(OSH(),3,(Equator(),Piby2()))
         @test Y1 ≈ Y2
-        @test Y1 ≈ Y3
     end
     @testset "GSH" begin
 		Y1 = Ylmatrix(GSH(),3,(π/2,π/2))
         Y2 = Ylmatrix(GSH(),3,(Equator(),π/2))
-        Y3 = Ylmatrix(GSH(),3,(Equator(),Piby2()))
         @test Y1 ≈ Y2
-        @test Y1 ≈ Y3
     end
 end
 
@@ -280,51 +319,73 @@ end
     end
 end
 
-@testset "BiPoSH GSH conjugate" begin
+@testset "BiPoSH conjugate" begin
     n1 = Point2D(π/3,0)
 	n2 = Point2D(π/3,π/3)
-	n1 = Point2D(π/3,0)
-	n2 = Point2D(π/3,π/3)
 
-	@testset "m=0" begin
-		function testconj(l,j₁,j₂)
-		    phase = (-1)^(j₁+j₂+l)
-		    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
-		    for α₂ = -1:1, α₁ = -1:1
-		    	@test begin
-		    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
-		    		if !res
-		    			@show (l,j₁,j₂,α₁,α₂) b[α₁,α₂] b[-α₁,-α₂]
-		    		end
-		    		res
+	@testset "OSH" begin
+		@testset "m=0" begin
+		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂
+		    	B = BiPoSH(OSH(),n1,n2,l,0,j₁,j₂)
+		    	if iseven(j₁+j₂+l)
+		    		@test B == real(B)
+		    	else
+		    		@test B == imag(B)*im
 		    	end
 		    end
 		end
-		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
-			testconj(l,j₁,j₂)
+		@testset "m and -m" begin
+		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂, m=-l:l
+		    	Bm = BiPoSH(OSH(),n1,n2,l,m,j₁,j₂)
+		    	B₋m = BiPoSH(OSH(),n1,n2,l,-m,j₁,j₂)
+		    	@test Bm ≈ (-1)^(j₁+j₂+l+m)*conj(B₋m)
+		    end
 		end
 	end
-	@testset "m and -m" begin
-	    function testconj(l,m,j₁,j₂)
-		    
-		    phase = (-1)^(j₁+j₂+l+m)
-		    
-		    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
-		    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
 
-		    for α₂ = -1:1, α₁ = -1:1
-		    	@test begin
-		    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
-		    			atol=1e-15, rtol= sqrt(eps(Float64)))
-		    		if !res
-		    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
-		    		end
-		    		res
-		    	end
-		    end
+	@testset "GSH" begin
+	    @testset "m=0" begin
+			function testconj(l,j₁,j₂)
+			    phase = (-1)^(j₁+j₂+l)
+			    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
+			    for α₂ = -1:1, α₁ = -1:1
+			    	@test begin
+			    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
+			    		if !res
+			    			@show (l,j₁,j₂,α₁,α₂) b[α₁,α₂] b[-α₁,-α₂]
+			    		end
+			    		res
+			    	end
+			    end
+			    # The (0,0) term is explicitly set for m=0
+			    @test b[0,0] == phase * conj(b[0,0])
+			end
+			for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂
+				testconj(l,j₁,j₂)
+			end
 		end
-		for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂, m = -l:l
-			testconj(l,m,j₁,j₂)
+		@testset "m and -m" begin
+		    function testconj(l,m,j₁,j₂)
+			    
+			    phase = (-1)^(j₁+j₂+l+m)
+			    
+			    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
+			    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
+
+			    for α₂ = -1:1, α₁ = -1:1
+			    	@test begin
+			    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
+			    			atol=1e-15, rtol= sqrt(eps(Float64)))
+			    		if !res
+			    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
+			    		end
+			    		res
+			    	end
+			    end
+			end
+			for j₁ = 1:4, j₂ = 1:4, l = abs(j₁ - j₂):j₁+j₂, m = -l:l
+				testconj(l,m,j₁,j₂)
+			end
 		end
 	end
 end
