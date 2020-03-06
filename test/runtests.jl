@@ -100,6 +100,41 @@ end
 	@test d1[-1,-1] ≈ (1+cos(θ))/2
 end
 
+@testset "d2_mn(θ)" begin
+	θ = π*rand()
+	d2 = djmatrix(2,θ)
+	
+	@test d2[2,2] ≈ cos(θ/2)^4
+	@test d2[2,1] ≈ -sin(θ)*(1+cos(θ))/2
+	@test d2[2,0] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[2,-1] ≈ -sin(θ)*(1-cos(θ))/2
+	@test d2[2,-2] ≈ sin(θ/2)^4
+	
+	@test d2[1,2] ≈ sin(θ)*(1+cos(θ))/2
+	@test d2[1,1] ≈ (2cos(θ)^2+cos(θ)-1)/2
+	@test d2[1,0] ≈ -√(3/2)*sin(θ)*cos(θ)
+	@test d2[1,-1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
+	@test d2[1,-2] ≈ -sin(θ)*(1-cos(θ))/2
+
+	@test d2[0,2] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[0,1] ≈ √(3/2)*sin(θ)*cos(θ)
+	@test d2[0,0] ≈ 1/2*(3cos(θ)^2-1)
+	@test d2[0,-1] ≈ -√(3/2)*sin(θ)*cos(θ)
+	@test d2[0,-2] ≈ 1/2*√(3/2)*sin(θ)^2
+
+	@test d2[-1,2] ≈ sin(θ)*(1-cos(θ))/2
+	@test d2[-1,1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
+	@test d2[-1,0] ≈ √(3/2)*sin(θ)*cos(θ)
+	@test d2[-1,-1] ≈ (2cos(θ)^2+cos(θ)-1)/2
+	@test d2[-1,-2] ≈ -sin(θ)*(1+cos(θ))/2
+
+	@test d2[-2,2] ≈ sin(θ/2)^4
+	@test d2[-2,1] ≈ sin(θ)*(1-cos(θ))/2
+	@test d2[-2,0] ≈ 1/2*√(3/2)*sin(θ)^2
+	@test d2[-2,-1] ≈ sin(θ)*(1+cos(θ))/2
+	@test d2[-2,-2] ≈ cos(θ/2)^4
+end
+
 @testset "Clebsch-Gordan" begin
 	@testset "allocating" begin
 		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,1,1)
