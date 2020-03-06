@@ -19,7 +19,6 @@ export Ylmn
 export Ylmatrix
 export Ylmatrix!
 export djmatrix!
-export Jy_eigen
 export djmn
 export djmatrix
 export BiPoSH
@@ -68,6 +67,13 @@ Base.AbstractFloat(p::Equator) = Float64(p)
 
 Base.one(::Type{Equator}) = one(Float64)
 
+#########################################################################
+# Dictionary to cache the eigenvectors and eigenvalues of Jy 
+#########################################################################
+
+const JyEigenDict = Dict{Int,
+	Tuple{OffsetVector{Float64,Vector{Float64}},OffsetArray{ComplexF64,2,Matrix{ComplexF64}}}}()
+
 ##########################################################################
 # Wigner d matrix
 ##########################################################################
@@ -96,24 +102,12 @@ function coeffi!(j,A)
 	return h
 end
 
-function Jy_eigen(j)
-	A = coeffi(j)
-	λ,v = eigen(A)
-	# We know that the eigenvalues of Jy are m ∈ -j:j, so we can round λ to integers and gain accuracy
-	λ = round.(λ)
-	#sort the array
-	if issorted(λ)
-		v = OffsetArray(collect(transpose(v)),-j:j,-j:j)
-		λ = OffsetArray(λ,-j:j)
-	else
-		p = sortperm(λ)
-		v = OffsetArray(collect(transpose(v[:,p])),-j:j,-j:j)
-		λ = OffsetArray(λ[p],-j:j)
-	end
-	return λ,v
-end
-
 function Jy_eigen!(j,A)
+	
+	if j in keys(JyEigenDict)
+		return JyEigenDict[j]
+	end
+	
 	A_filled = coeffi!(j,A)
 	λ,v = eigen!(A_filled)
 	# We know that the eigenvalues of Jy are m ∈ -j:j, 
@@ -128,6 +122,9 @@ function Jy_eigen!(j,A)
 		v = OffsetArray(permutedims(v[:,p]),-j:j,-j:j)
 		λ = OffsetArray(λ[p],-j:j)
 	end
+
+	JyEigenDict[j] = (λ,v)
+
 	return λ,v
 end
 
@@ -177,9 +174,9 @@ function djmatrix_terms(θ::SouthPole,λ,v,m::Integer,n::Integer,j=div(length(λ
 	@inbounds for μ in axes(λ,1)
 		temp  = v[μ,m] * conj(v[μ,n])
 
-		dj_m_n += cis(-λ[μ],SouthPole()) * temp
+		dj_m_n += cis(-λ[μ],θ) * temp
 		if m != n
-			dj_n_m += cis(λ[μ],SouthPole()) * temp
+			dj_n_m += cis(λ[μ],θ) * temp
 		end
 		
 		dj_m_n_πmθ += cis(0.0) * temp
@@ -252,13 +249,8 @@ function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v,inds_covered = falses(m_ran
 	return dj
 end
 
-read_or_compute_eigen(j,::Nothing,::Nothing) = Jy_eigen(j)
-read_or_compute_eigen(j,::Nothing,v) = (Float64(-j):Float64(j),v)
-read_or_compute_eigen(j,λ,v) = (λ,v)
-
-read_or_compute_eigen!(j,A,::Nothing,::Nothing) = Jy_eigen!(j,A)
-read_or_compute_eigen!(j,A,::Nothing,v) = read_or_compute_eigen(j,v)
-read_or_compute_eigen!(j,A,λ,v) = (λ,v)
+read_or_compute_eigen!(j,A,λ,v) = Jy_eigen!(j,A)
+read_or_compute_eigen!(j,A,λ::OffsetVector{<:Real},v::OffsetArray{<:Complex,2}) = (λ,v)
 
 struct djindices end
 struct GSHindices end

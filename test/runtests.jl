@@ -31,7 +31,8 @@ end
 
 @testset "djmatrix_terms" begin
 	j = 5
-    λ,v = Jy_eigen(j)
+	A = zeros(ComplexF64,2j+1,2j+1)
+    λ,v = WignerD.Jy_eigen!(j,A)
 
     function testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
     	@test begin 
