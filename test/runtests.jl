@@ -85,55 +85,109 @@ end
 end
 
 @testset "d1_mn(θ)" begin
-	θ = π*rand()
+	n = 100
+	for θ in LinRange(π/n,π-π/n,2n+1)
+		d1 = djmatrix(1,θ)
+		
+		@test isapprox(d1[1,1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[1,0],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[1,-1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d1[0,1],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[0,0],cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[0,-1],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d1[-1,1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[-1,0],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[-1,-1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+	end
+
+	θ = Equator()
 	d1 = djmatrix(1,θ)
-	
-	@test d1[1,1] ≈ (1+cos(θ))/2
-	@test d1[1,0] ≈ -sin(θ)/√2
-	@test d1[1,-1] ≈ (1-cos(θ))/2
+	@testset "Equator" begin
+	    @test isapprox(d1[1,1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[1,0],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[1,-1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-	@test d1[0,1] ≈ sin(θ)/√2
-	@test d1[0,0] ≈ cos(θ)
-	@test d1[0,-1] ≈ -sin(θ)/√2
+		@test isapprox(d1[0,1],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[0,0],cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[0,-1],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
 
-	@test d1[-1,1] ≈ (1-cos(θ))/2
-	@test d1[-1,0] ≈ sin(θ)/√2
-	@test d1[-1,-1] ≈ (1+cos(θ))/2
+		@test isapprox(d1[-1,1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[-1,0],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d1[-1,-1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+	end
 end
 
 @testset "d2_mn(θ)" begin
-	θ = π*rand()
-	d2 = djmatrix(2,θ)
-	
-	@test d2[2,2] ≈ cos(θ/2)^4
-	@test d2[2,1] ≈ -sin(θ)*(1+cos(θ))/2
-	@test d2[2,0] ≈ 1/2*√(3/2)*sin(θ)^2
-	@test d2[2,-1] ≈ -sin(θ)*(1-cos(θ))/2
-	@test d2[2,-2] ≈ sin(θ/2)^4
-	
-	@test d2[1,2] ≈ sin(θ)*(1+cos(θ))/2
-	@test d2[1,1] ≈ (2cos(θ)^2+cos(θ)-1)/2
-	@test d2[1,0] ≈ -√(3/2)*sin(θ)*cos(θ)
-	@test d2[1,-1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
-	@test d2[1,-2] ≈ -sin(θ)*(1-cos(θ))/2
+	n = 100
+	for θ in LinRange(π/n,π-π/n,2n+1)
+		d2 = djmatrix(2,θ)
+		
+		@test isapprox(d2[2,2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,-2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		
+		@test isapprox(d2[1,2],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,-2],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-	@test d2[0,2] ≈ 1/2*√(3/2)*sin(θ)^2
-	@test d2[0,1] ≈ √(3/2)*sin(θ)*cos(θ)
-	@test d2[0,0] ≈ 1/2*(3cos(θ)^2-1)
-	@test d2[0,-1] ≈ -√(3/2)*sin(θ)*cos(θ)
-	@test d2[0,-2] ≈ 1/2*√(3/2)*sin(θ)^2
+		@test isapprox(d2[0,2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,-2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 
-	@test d2[-1,2] ≈ sin(θ)*(1-cos(θ))/2
-	@test d2[-1,1] ≈ -(2cos(θ)^2-cos(θ)-1)/2
-	@test d2[-1,0] ≈ √(3/2)*sin(θ)*cos(θ)
-	@test d2[-1,-1] ≈ (2cos(θ)^2+cos(θ)-1)/2
-	@test d2[-1,-2] ≈ -sin(θ)*(1+cos(θ))/2
+		@test isapprox(d2[-1,2],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,-2],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-	@test d2[-2,2] ≈ sin(θ/2)^4
-	@test d2[-2,1] ≈ sin(θ)*(1-cos(θ))/2
-	@test d2[-2,0] ≈ 1/2*√(3/2)*sin(θ)^2
-	@test d2[-2,-1] ≈ sin(θ)*(1+cos(θ))/2
-	@test d2[-2,-2] ≈ cos(θ/2)^4
+		@test isapprox(d2[-2,2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,-2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+	end
+
+	@testset "Equator" begin
+		θ = Equator()
+		d2 = djmatrix(2,θ)
+		@test isapprox(d2[2,2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[2,-2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		
+		@test isapprox(d2[1,2],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[1,-2],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d2[0,2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[0,-2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d2[-1,2],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-1,-2],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d2[-2,2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d2[-2,-2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+	end
 end
 
 @testset "Clebsch-Gordan" begin

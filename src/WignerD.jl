@@ -249,9 +249,6 @@ function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v,inds_covered = falses(m_ran
 	return dj
 end
 
-read_or_compute_eigen!(j,A,λ,v) = Jy_eigen!(j,A)
-read_or_compute_eigen!(j,A,λ::OffsetVector{<:Real},v::OffsetArray{<:Complex,2}) = (λ,v)
-
 struct djindices end
 struct GSHindices end
 struct OSHindices end
@@ -283,11 +280,9 @@ function djmatrix!(dj,j,θ::Real,
 	A::Matrix{ComplexF64}=zeros(ComplexF64,2j+1,2j+1),
 	inds_covered = falses(axes(dj)); kwargs...)
 
-	λ = get(kwargs,:λ,nothing)
-	v = get(kwargs,:v,nothing)
 	m_range,n_range = get_m_n_ranges(j;kwargs...)
 
-	λ,v = read_or_compute_eigen!(j,A,λ,v)
+	λ,v = Jy_eigen!(j,A)
 
 	djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v,inds_covered)
 end
@@ -685,18 +680,30 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	YSH_n₂::AbstractVector{<:Complex},
 	P::AbstractVector{<:Real},coeff;
 	compute_Y₁=true,compute_Y₂=true,
-	w3j=nothing,CG=nothing,
+	CG = zeros(0:ℓ₁ + ℓ₂),
+	w3j = zeros(ℓ₁ + ℓ₂ + 1),
 	kwargs...)
 
 	compute_Y₁ && compute_YP!(ℓ₁,(θ₁,ϕ₁),YSH_n₁,P,coeff)
 	compute_Y₂ && compute_YP!(ℓ₂,(θ₂,ϕ₂),YSH_n₂,P,coeff)
 
-	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
-	
-	Yℓ₁n₁ = OffsetVector(@view(YSH_n₁[index_y(ℓ₁)]),-ℓ₁:ℓ₁)
-	Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[index_y(ℓ₂)]),-ℓ₂:ℓ₂)
-	BiPoSH_compute!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
-		Yℓ₁n₁,Yℓ₂n₂;kwargs...,w3j=w3j,CG=CG)
+	lib = nothing
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do 
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
+		end
+
+		Yℓ₁n₁ = OffsetVector(@view(YSH_n₁[index_y(ℓ₁)]),-ℓ₁:ℓ₁)
+		Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[index_y(ℓ₂)]),-ℓ₂:ℓ₂)
+		
+		BiPoSH_compute!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
+			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;kwargs...,w3j=w3j,CG=CG)
+	finally
+		Libdl.dlclose(lib)
+	end
+
+	return B
 end
 
 @inline BiPoSH!(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -726,8 +733,20 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 					# don't recompute dj if unnecessary
 					compute_d_matrix = !( compute_Y₁ && (ℓ₁ == ℓ₂) && (θ₁ == θ₂) && (dℓ₁n₁ === dℓ₂n₂) ) )
 
-	BiPoSH_compute!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
-		Yℓ₁n₁,Yℓ₂n₂;kwargs...,w3j=w3j,CG=CG,β=β,γ=γ)
+	lib = nothing
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do 
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
+		end
+
+		BiPoSH_compute!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
+			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;kwargs...,w3j=w3j,CG=CG,β=β,γ=γ)
+	finally
+		Libdl.dlclose(lib)
+	end
+
+	return B
 end
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -748,9 +767,10 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	YSH_n₁::AbstractVector{<:Complex},
 	YSH_n₂::AbstractVector{<:Complex},
 	P::AbstractVector{<:Real},coeff;
-	CG=nothing,w3j=nothing,
+	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
+	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
-	compute_Y₁=true,compute_Y₂=true)
+	compute_Y₁=true,compute_Y₂=true,kwargs...)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -760,20 +780,22 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if @compat @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
+		end
 
-	w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
+		for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
-	for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
-
-		BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
-			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
-			YSH_n₁,YSH_n₂,P,coeff;
-			CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-			compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
+			BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
+				shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
+				YSH_n₁,YSH_n₂,P,coeff;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
+		end
+	finally
+		Libdl.dlclose(lib)
 	end
 
 	return Yℓ′n₁ℓn₂
@@ -789,7 +811,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
 	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
-	compute_Y₁=true,compute_Y₂=true)
+	compute_Y₁=true,compute_Y₂=true,kwargs...)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -800,21 +822,23 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
+		end
+
+		for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
+			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
+				shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
+				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,A_djcoeffi,dj_inds_flag;
+				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+				compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
+		end
+	finally
+		Libdl.dlclose(lib)
 	end
-
-	for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
-
-		BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
-			shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
-			Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,A_djcoeffi,dj_inds_flag;
-			CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-			compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
-	end
-
-	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂
 end
@@ -845,7 +869,6 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	P::AbstractVector{<:Real},coeff;
 	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
 	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
-	wig3j_fn_ptr=nothing,
 	compute_Y₁=true,
 	compute_Y₂=true,kwargs...)
 
@@ -858,57 +881,54 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	# w3j,CG = allocate_w3j_and_CG(lmax,l′max,w3j,CG)
-
-	@views begin
-
-	for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
-
-		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
-
-		Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[indℓ′ℓ]
-		Yℓ′n₂ℓn₁_st = Yℓ′n₂ℓn₁[indℓ′ℓ]
-
-		# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
-		# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
-		# Precomputation of the RHS would have happened if ℓ′<ℓ, 
-		# as the modes are sorted in order of increasing ℓ
-
-		if (ℓ,ℓ′) in ℓ′ℓ_smax && ℓ′<ℓ
-			# In this case Yℓn₁ℓ′n₂ and Yℓn₂ℓ′n₁ have already been computed
-			# This means we can evaluate Yℓ′n₂ℓn₁ and Yℓ′n₁ℓn₂ using the formulae
-			# presented above
-
-			indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
-			Yℓn₁ℓ′n₂_st = Yℓ′n₁ℓn₂[indℓℓ′]
-			Yℓn₂ℓ′n₁_st = Yℓ′n₂ℓn₁[indℓℓ′]
-
-			for (indst,(s,t)) in enumerate(shmodes(Yℓ′n₂ℓn₁_st))
-				Yℓ′n₂ℓn₁_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst]
-				Yℓ′n₁ℓn₂_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst]
-			end
-		else
-			# Default case, where we need to evaluate both
-
-			BiPoSH!(OSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
-				YSH_n₂,YSH_n₁,P,coeff;
-				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
-
-			BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
-				YSH_n₁,YSH_n₂,P,coeff;
-				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
 		end
-	end
-	end # views
 
-	@compat !isnothing(lib) && Libdl.dlclose(lib)
+		for (indℓ′ℓ,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+
+			# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
+
+			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[indℓ′ℓ]
+			Yℓ′n₂ℓn₁_st = Yℓ′n₂ℓn₁[indℓ′ℓ]
+
+			# We use Yℓ′n₂ℓn₁ = (-1)^(ℓ+ℓ′+s) Yℓn₁ℓ′n₂
+			# and Yℓ′n₁ℓn₂ = (-1)^(ℓ+ℓ′+s) Yℓn₂ℓ′n₁
+			# Precomputation of the RHS would have happened if ℓ′<ℓ, 
+			# as the modes are sorted in order of increasing ℓ
+
+			if (ℓ,ℓ′) in ℓ′ℓ_smax && ℓ′<ℓ
+				# In this case Yℓn₁ℓ′n₂ and Yℓn₂ℓ′n₁ have already been computed
+				# This means we can evaluate Yℓ′n₂ℓn₁ and Yℓ′n₁ℓn₂ using the formulae
+				# presented above
+
+				indℓℓ′ = modeindex(ℓ′ℓ_smax,(ℓ,ℓ′))
+				Yℓn₁ℓ′n₂_st = Yℓ′n₁ℓn₂[indℓℓ′]
+				Yℓn₂ℓ′n₁_st = Yℓ′n₂ℓn₁[indℓℓ′]
+
+				for (indst,(s,t)) in enumerate(shmodes(Yℓ′n₂ℓn₁_st))
+					Yℓ′n₂ℓn₁_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₁ℓ′n₂_st[indst]
+					Yℓ′n₁ℓn₂_st[indst] = (-1)^(ℓ+ℓ′+s)*Yℓn₂ℓ′n₁_st[indst]
+				end
+			else
+				# Default case, where we need to evaluate both
+
+				BiPoSH!(OSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
+					YSH_n₂,YSH_n₁,P,coeff;
+					CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
+
+				BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
+					YSH_n₁,YSH_n₂,P,coeff;
+					CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
+			end
+		end
+	finally
+		Libdl.dlclose(lib)
+	end
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
@@ -923,9 +943,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	dℓ₂n₂::AbstractMatrix{<:Real};
 	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
 	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
-	wig3j_fn_ptr=nothing,
-	compute_Y₁=true,
-	compute_Y₂=true,kwargs...)
+	compute_Y₁=true,compute_Y₂=true,kwargs...)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
@@ -936,63 +954,63 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 	lib = nothing
 
-	if @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	@views begin
-
-	for (ind_j₂j₁,(j₂,j₁)) in enumerate(ℓ′ℓ_smax)
-
-		# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
-
-		Pʲ²ʲ¹ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₂j₁]
-		Pʲ²ʲ¹ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₂j₁]
-
-		lm_iter = shmodes(Pʲ²ʲ¹ₗₘ_n₁n₂)
-
-		# We use the relation between the helicity basis components 
-		# Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁)
-		# and Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂)
-		# Precomputation of the RHS would have happened if j₂ < j₁, 
-		# as the modes are sorted in order of increasing j₁
-
-		if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁
-			# In this case Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂) and Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁) have already been computed
-			# This means we may evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
-			# presented above
-
-			ind_j₁j₂ = modeindex(ℓ′ℓ_smax,(j₁,j₂))
-
-			Pʲ¹ʲ²ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₁j₂]
-			Pʲ¹ʲ²ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₁j₂]
-
-			for α₂ in vectorinds(j₂), α₁ in vectorinds(j₁)
-				for (ind_lm,(l,m)) in enumerate(lm_iter)
-					phase = (-1)^(j₁+j₂+l)
-					Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,α₁,α₂]
-					Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,α₁,α₂]
-				end
-			end
-		else
-			# Default case, where we need to evaluate both
-
-			BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Pʲ²ʲ¹ₗₘ_n₂n₁,j₂,j₁,
-				Yℓ₂n₂,Yℓ₁n₁,dℓ₂n₂,dℓ₁n₁,A_djcoeffi,dj_inds_flag;
-				kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=true,compute_Y₂=true)
-
-			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Pʲ²ʲ¹ₗₘ_n₁n₂,j₂,j₁,
-				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,A_djcoeffi,dj_inds_flag;
-				kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-				compute_Y₁=(j₁ != j₂),compute_Y₂=(j₁ != j₂))
+	try
+		wig3j_fn_ptr = get(kwargs,:wig3j_fn_ptr) do
+			lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
+			Libdl.dlsym(lib,:wigner3j_wrapper)
 		end
+
+		for (ind_j₂j₁,(j₂,j₁)) in enumerate(ℓ′ℓ_smax)
+
+			# In one pass we can compute Yℓ′n₁ℓn₂ and Yℓn₂ℓ′n₁
+
+			Pʲ²ʲ¹ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₂j₁]
+			Pʲ²ʲ¹ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₂j₁]
+
+			lm_iter = shmodes(Pʲ²ʲ¹ₗₘ_n₁n₂)
+
+			# We use the relation between the helicity basis components 
+			# Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁)
+			# and Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) = (-1)ʲ¹⁺ʲ²⁺ˡ Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂)
+			# Precomputation of the RHS would have happened if j₂ < j₁, 
+			# as the modes are sorted in order of increasing j₁
+
+			if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁
+				# In this case Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂) and Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁) have already been computed
+				# This means we may evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
+				# presented above
+
+				ind_j₁j₂ = modeindex(ℓ′ℓ_smax,(j₁,j₂))
+
+				Pʲ¹ʲ²ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₁j₂]
+				Pʲ¹ʲ²ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₁j₂]
+
+				for α₂ in vectorinds(j₂), α₁ in vectorinds(j₁)
+					for (ind_lm,(l,m)) in enumerate(lm_iter)
+						phase = (-1)^(j₁+j₂+l)
+						Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,α₁,α₂]
+						Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,α₁,α₂]
+					end
+				end
+			else
+				# Default case, where we need to evaluate both
+
+				d2 = (j₁ == j₂) && (θ₁ == θ₂) ? dℓ₁n₁ : dℓ₂n₂
+
+				BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Pʲ²ʲ¹ₗₘ_n₂n₁,j₂,j₁,
+					Yℓ₂n₂,Yℓ₁n₁,d2,dℓ₁n₁,A_djcoeffi,dj_inds_flag;
+					kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+					compute_Y₁=true,compute_Y₂=true)
+
+				BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Pʲ²ʲ¹ₗₘ_n₁n₂,j₂,j₁,
+					Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,d2,A_djcoeffi,dj_inds_flag;
+					kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
+					compute_Y₁=(j₁ != j₂),compute_Y₂=(j₁ != j₂))
+			end
+		end
+	finally
+		Libdl.dlclose(lib)
 	end
-
-	end # views
-
-	@compat !isnothing(lib) && Libdl.dlclose(lib)
 
 	return Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
 end
@@ -1014,10 +1032,10 @@ end
 function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
 	Yℓ₁ℓ₂n₁n₂::AbstractArray{<:Number,3},
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
-	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number};
+	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number},wig3j_fn_ptr;
 	β::AbstractUnitRange=vectorinds(ℓ₁),γ::AbstractUnitRange=vectorinds(ℓ₂),
 	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),
-	wig3j_fn_ptr=nothing,kwargs...)
+	kwargs...)
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 
@@ -1026,15 +1044,6 @@ function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	m_valid = m_range(lm_modes_ℓ₁ℓ₂)
 	β_valid = intersect(β,axes(Yℓ₁ℓ₂n₁n₂,2))
 	γ_valid = intersect(γ,axes(Yℓ₁ℓ₂n₁n₂,3))
-
-	lib = nothing
-
-	if @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
 
 	for γ in γ_valid
 		
@@ -1118,8 +1127,8 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	Yℓ₁ℓ₂n₁n₂::AbstractVector{<:Number},
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractVector{<:Number},
-	Yℓ₂n₂::AbstractVector{<:Number};
-	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),wig3j_fn_ptr=nothing,kwargs...)
+	Yℓ₂n₂::AbstractVector{<:Number},wig3j_fn_ptr;
+	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),kwargs...)
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 
@@ -1129,15 +1138,6 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	l_valid = l_range(lm_modes)
 	m_valid = m_range(lm_modes)
 
-	lib = nothing
-
-	if @compat isnothing(wig3j_fn_ptr)
-		lib=Libdl.dlopen(joinpath(dirname(pathof(WignerD)),"shtools_wrapper.so"))
-		wig3j_fn_ptr=Libdl.dlsym(lib,:wigner3j_wrapper)
-	end
-
-	w3j,CG = allocate_w3j_and_CG(ℓ₁,ℓ₂,w3j,CG)
-			
 	for m in m_valid
 		
 		lrange_m = l_range(lm_modes_ℓ₁ℓ₂,m)
@@ -1195,20 +1195,10 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 		end
 	end
 
-	@compat !isnothing(lib) && Libdl.dlclose(lib)
-
 	return Yℓ₁ℓ₂n₁n₂
 end
 
 ##################################################################################################
-
-@inline allocate_w3j_and_CG(l₁,l₂,::Nothing,::Nothing) = (zeros(l₁+l₂+1),zeros(0:l₁+l₂))
-
-@inline allocate_w3j_and_CG(l₁,l₂,w3j,::Nothing) = (w3j,zeros(0:l₁+l₂))
-
-@inline allocate_w3j_and_CG(l₁,l₂,::Nothing,CG) = (zeros(l₁+l₂+1),CG)
-
-@inline allocate_w3j_and_CG(l₁,l₂,w3j,CG) = (w3j,CG)
 
 function Wigner3j(j2,j3,m2,m3;wig3j_fn_ptr=nothing)
 	
