@@ -34,7 +34,7 @@ end
 	A = zeros(ComplexF64,2j+1,2j+1)
     λ,v = WignerD.Jy_eigen!(j,A)
 
-    function testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+    function testapprox(m,n,dj_m_n,dj_m_n2)
     	@test begin 
     		res = isapprox(dj_m_n,dj_m_n2,atol=1e-14,rtol=sqrt(eps(Float64)))
     		if !res
@@ -42,44 +42,30 @@ end
     		end
     		res
     	end
-    	@test begin 
-    		res = isapprox(dj_m_n_πmθ,dj_m_n_πmθ2,atol=1e-14,rtol=sqrt(eps(Float64)))
-    		if !res
-    			@show m n dj_m_n_πmθ dj_m_n_πmθ2
-    		end
-    		res
-    	end	
-    	@test begin 
-    		res = isapprox(dj_n_m,dj_n_m2,atol=1e-14,rtol=sqrt(eps(Float64)))
-    		if !res
-    			@show m n dj_n_m dj_n_m2
-    		end
-    		res
-    	end
     end
     
     @testset "Equator" begin
         for m in -j:j, n in -j:j
-        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(π/2,λ,v,m,n)
-        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(Equator(),λ,v,m,n)
+        	dj_m_n = WignerD.djmatrix_terms(π/2,λ,v,m,n)
+        	dj_m_n2 = WignerD.djmatrix_terms(Equator(),λ,v,m,n)
 
-        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        	testapprox(m,n,dj_m_n,dj_m_n2)
         end
     end
     @testset "NorthPole" begin
         for m in -j:j, n in -j:j
-        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(0,λ,v,m,n)
-        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(NorthPole(),λ,v,m,n)
+        	dj_m_n = WignerD.djmatrix_terms(0,λ,v,m,n)
+        	dj_m_n2 = WignerD.djmatrix_terms(NorthPole(),λ,v,m,n)
 
-        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        	testapprox(m,n,dj_m_n,dj_m_n2)
         end
     end
     @testset "SouthPole" begin
         for m in -j:j, n in -j:j
-        	dj_m_n,dj_m_n_πmθ,dj_n_m = WignerD.djmatrix_terms(π,λ,v,m,n)
-        	dj_m_n2,dj_m_n_πmθ2,dj_n_m2 = WignerD.djmatrix_terms(SouthPole(),λ,v,m,n)
+        	dj_m_n = WignerD.djmatrix_terms(π,λ,v,m,n)
+        	dj_m_n2 = WignerD.djmatrix_terms(SouthPole(),λ,v,m,n)
 
-        	testapprox(m,n,dj_m_n,dj_m_n_πmθ,dj_n_m,dj_m_n2,dj_m_n_πmθ2,dj_n_m2)
+        	testapprox(m,n,dj_m_n,dj_m_n2)
         end
     end
 end
@@ -124,69 +110,49 @@ end
 	for θ in LinRange(π/n,π-π/n,2n+1)
 		d2 = djmatrix(2,θ)
 		
-		@test isapprox(d2[2,2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,-2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		
-		@test isapprox(d2[1,2],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,-2],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[0,2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,-2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[-1,2],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,-2],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[-2,2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,-2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 	end
 
 	@testset "Equator" begin
 		θ = Equator()
 		d2 = djmatrix(2,θ)
-		@test isapprox(d2[2,2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,-2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		
-		@test isapprox(d2[1,2],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,-2],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[0,2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,-2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[-1,2],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,-2],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[-2,2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,-2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 	end
 end
 
@@ -248,12 +214,26 @@ end
 										-√(3/8π)*sin(n.θ)cis(n.ϕ)],-1:1)
 end
 
+@testset "Yⁿ₁ₘ explicit" begin
+	θ,ϕ = π/2, π/4
+    n = Point2D(θ,ϕ)
+    Y = Ylmatrix(GSH(),1,n)
+
+    Yexp = [1/2*cis(-ϕ)*√(3/π)*cos(θ/2)^2    1/2*cis(-ϕ)*√(3/(2π))*sin(θ)   1/2*cis(-ϕ)*√(3/π)*sin(θ/2)^2 
+			-1/2*√(3/(2π))*sin(θ)               1/2*√(3/π)*cos(θ)              1/2*√(3/(2π))*sin(θ) 
+			1/2*cis(ϕ)*√(3/π)*sin(θ/2)^2    -1/2*cis(ϕ)*√(3/(2π))*sin(θ)  1/2*cis(ϕ)*√(3/π)*cos(θ/2)^2]
+
+    @test parent(collect(Y)) ≈ Yexp
+end
+
 @testset "Ylmatrix OSH and GSH" begin
-	ℓ = rand(1:10)
-	n = Point2D(π/2,0)
+	ℓ = 3
+	n = Point2D(π/3,0)
 	Y1 = Ylmatrix(GSH(),ℓ,n)
 	Y2 = Ylmatrix(OSH(),ℓ,n)
-	@test Y1[:,0] ≈ Y2
+	for m in axes(Y1,1)
+		@test Y1[m,0] ≈ Y2[m]
+	end
 end
 
 @testset "Ylmatrix special points" begin
@@ -316,6 +296,33 @@ end
 	@test YB_10_n1n2 ≈ -YB_10_n2n1
 end
 
+@testset "Ylmatrix conjugate" begin
+	n = Point2D(π/3,π/3)
+    @testset "GSH" begin
+    	for j = 1:5
+	        Y = Ylmatrix(GSH(),j,n)
+	        for m = -j:j, n=-1:1
+	        	@test Y[-m,-n] == (-1)^(m+n) * conj(Y[m,n])
+	        end
+	        @testset "m = 0" begin
+	        	for n=-1:1
+	           		@test iszero(imag(Y[0,n]))
+	           	end
+	        end
+	    end
+    end
+    @testset "OSH" begin
+    	j = 4
+        Y = Ylmatrix(OSH(),j,n)
+        for m = -j:j
+        	@test Y[-m] == (-1)^m * conj(Y[m])
+        end
+        @testset "m = 0" begin
+            @test iszero(imag(Y[0]))
+        end
+    end
+end
+
 @testset "BiPoSH_OSH_10" begin
 	n1 = Point2D(π*rand(),2π*rand());
 	n2 = Point2D(π*rand(),2π*rand());
@@ -354,19 +361,52 @@ end
 	@test YB_10_n1n2 ≈ -YB_10_n2n1
 end
 
+@testset "BiPoSH GSH explicit for m=0" begin
+	n1 = Point2D(π/2,π/4)
+	n2 = Point2D(π/2,π/2)
+	Δϕ₁₂ = n1.ϕ - n2.ϕ
+
+	j = 1
+
+    @testset "l=0" begin
+        B = BiPoSH(GSH(),n1,n2,0,0,j,j)
+        B_exp = [√3/8π*(-1 + cosh(im*Δϕ₁₂))    √(3/2)/4π*sinh(im*Δϕ₁₂)     √3/8π*(1 + cosh(im*Δϕ₁₂)) 
+       			-√(3/2)/4π*sinh(im*Δϕ₁₂)       -√3/4π*cosh(im*Δϕ₁₂)       -√(3/2)/4π*sinh(im*Δϕ₁₂) 
+       			√3/8π*(1 + cosh(im*Δϕ₁₂))     √(3/2)/4π*sinh(im*Δϕ₁₂)      √3/8π*(-1 + cosh(im*Δϕ₁₂))]
+
+       	@test parent(B) ≈ B_exp
+   end
+   @testset "l=1" begin
+        B = BiPoSH(GSH(),n1,n2,1,0,j,j)
+        B_exp = [3/(8*√2π)*sinh(im*Δϕ₁₂)    3/8π*cosh(im*Δϕ₁₂)     3/(8*√2π)*sinh(im*Δϕ₁₂) 
+       			-3/8π*cosh(im*Δϕ₁₂)       -3/(4*√2π)*sinh(im*Δϕ₁₂)      -3/8π*cosh(im*Δϕ₁₂) 
+       			3/(8*√2π)*sinh(im*Δϕ₁₂)     3/8π*cosh(im*Δϕ₁₂)      3/(8*√2π)*sinh(im*Δϕ₁₂)]
+
+       	@test parent(B) ≈ B_exp
+   end
+   @testset "l=2" begin
+        B = BiPoSH(GSH(),n1,n2,2,0,j,j)
+        B_exp = [√(3/2)/8π*(2 + cosh(im*Δϕ₁₂))    √3/8π*sinh(im*Δϕ₁₂)       √(3/2)/8π*(-2 + cosh(im*Δϕ₁₂)) 
+       			 -√3/8π*sinh(im*Δϕ₁₂)            -√(3/2)/4π*cosh(im*Δϕ₁₂)   -√3/8π*sinh(im*Δϕ₁₂) 
+       			 √(3/2)/8π*(-2 + cosh(im*Δϕ₁₂))   √3/8π*sinh(im*Δϕ₁₂)       √(3/2)/8π*(2 + cosh(im*Δϕ₁₂)) ]
+
+       	@test parent(B) ≈ B_exp
+   end
+end
+
 @testset "BiPoSH OSH and GSH" begin
-	n1 = Point2D(π/3,0)
+	n1 = Point2D(π/3,π/4)
 	n2 = Point2D(π/3,π/3)
-	s_max = 20
+	s_max = 3
 	SHModes = LM(0:s_max);
-	for j₁ in 0:20, j₂ in 0:20
+	for j₁ in 0:3, j₂ in 0:3
 		WignerD.δ(j₁,j₂,s_max) || continue
 	    B_GSH=BiPoSH(GSH(),n1,n2,SHModes,j₂,j₁)
 	    B_OSH=BiPoSH(OSH(),n1,n2,SHModes,j₂,j₁)
     	@test begin
-    		res = B_GSH[:,0,0] ≈ B_OSH
+    		res = B_GSH[0,0,:] ≈ B_OSH
     		if !res
-    			@show (j₁,j₂,s_max) B_GSH[:,0,0] B_OSH
+    			@show (j₁,j₂,s_max) B_GSH[0,0,:] B_OSH
     		end
     		res
     	end
@@ -374,7 +414,7 @@ end
 end
 
 @testset "BiPoSH conjugate" begin
-    n1 = Point2D(π/3,0)
+    n1 = Point2D(π/3,π/4)
 	n2 = Point2D(π/3,π/3)
 
 	@testset "OSH" begin
@@ -559,8 +599,8 @@ end
 	    		Yℓn₂ℓ′n₁ = Yℓ′n₂ℓn₁_all[(ℓ,ℓ′)]
 	    		for (s,t) in shmodes(Yℓ′n₁ℓn₂)
 	    			phase = (-1)^(ℓ′ + ℓ + s)
-	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[(s,t),:,:]
-	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[(s,t),:,:]
+	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[:,:,(s,t)]
+	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[:,:,(s,t)]
     				@test begin
     					res = Yℓ′n₁ℓn₂_st ≈ phase .* permutedims(Yℓn₂ℓ′n₁_st)
     					if !res
@@ -578,7 +618,7 @@ end
 	    		YGSH = Yℓ′n₁ℓn₂_all[j₂j₁ind]
 	    		YOSH = Yℓ′n₁ℓn₂_all_OSH[j₂j₁ind]
 	    		@test shmodes(YGSH) == shmodes(YOSH)
-	    		@test YGSH[:,0,0] ≈ YOSH
+	    		@test YGSH[0,0,:] ≈ YOSH
 	    	end
 	    end
 

@@ -12,7 +12,7 @@ using Libdl
 @reexport using SphericalHarmonicModes
 import SphericalHarmonics: Pole
 
-import SphericalHarmonicArrays: SHArrayOnlyFirstAxis
+import SphericalHarmonicArrays: SHArrayOneAxis
 import SphericalHarmonicModes: ModeRange, SHModeRange
 
 export Ylmn
@@ -75,6 +75,104 @@ const JyEigenDict = Dict{Int,
 	Tuple{OffsetVector{Float64,Vector{Float64}},OffsetArray{ComplexF64,2,Matrix{ComplexF64}}}}()
 
 ##########################################################################
+# Struct to store d matrix and generalized Ylm accounting for symmetries
+##########################################################################
+
+struct djindices end
+struct GSHindices end
+struct OSHindices end
+
+vectorinds(j::Int) = iszero(j) ? Base.IdentityUnitRange(0:0) : Base.IdentityUnitRange(-1:1)
+
+abstract type WignerMatrices{T} <: AbstractArray{T,2} end
+
+struct ReduceddjMatrix <: WignerMatrices{Float64}
+	j :: Int
+	data :: Vector{Float64}
+end
+
+struct GeneralizedY <: WignerMatrices{ComplexF64}
+	j :: Int
+	data :: Vector{ComplexF64}
+end
+
+ReduceddjMatrix(j::Int) = ReduceddjMatrix(j,zeros(3j+1))
+GeneralizedY(j::Int) = GeneralizedY(j,zeros(ComplexF64,(j+1)*length(vectorinds(j))))
+
+function flatind(d::ReduceddjMatrix,m,n)
+	m >=0 || throw(ArgumentError("m needs to be >= 0"))
+	vindmax = maximum(vectorinds(d.j))
+	abs(n) <= vindmax || throw(ArgumentError("abs(n) needs to be <= $(vindmax)"))
+	m == 0 && n != 0 && throw(ArgumentError("m = 0 only has n = 0 saved"))
+	m == 0 && n == 0 && return 1
+	3*(m-1) + (n + vindmax) + 2
+end
+
+function flatind(d::GeneralizedY,m,n)
+	m >=0 || throw(ArgumentError("m needs to be >= 0"))
+	vindmax = maximum(vectorinds(d.j))
+	abs(n) <= vindmax || throw(ArgumentError("abs(n) needs to be <= $(vindmax)"))
+	3m + (n + vindmax) + 1
+end
+
+function flatind_phase(d::ReduceddjMatrix,m,n)
+	phase = 1
+	if m < 0
+		m,n = -m,-n
+		phase = (-1)^(m-n)
+	elseif m == 0 && n == -1
+		m,n = 1,0
+	elseif m == 0 && n == 1
+		m,n = 1,0
+		phase = (-1)^(m-n)
+	end
+	ind = flatind(d,m,n)
+	ind,phase
+end
+
+function flatind_phase(d::GeneralizedY,m,n)
+	phase = 1
+	if m < 0
+		m,n = -m,-n
+		phase = (-1)^(m-n)
+	end
+	ind = flatind(d,m,n)
+	ind,phase
+end
+
+@inline Base.@propagate_inbounds function Base.getindex(d::ReduceddjMatrix,m::Int,n::Int)
+	ind,phase = flatind_phase(d,m,n)
+	d.data[ind] * phase
+end
+
+@inline Base.@propagate_inbounds function Base.getindex(d::GeneralizedY,m::Int,n::Int)
+	ind,phase = flatind_phase(d,m,n)
+	val = d.data[ind]
+	m >= 0 ? val : phase*conj(val)
+end
+
+Base.getindex(d::GeneralizedY,ind::Int) = d.data[ind]
+
+function Base.setindex!(d::WignerMatrices,val,m::Int,n::Int)
+	d.data[flatind(d,m,n)] = val
+end
+Base.setindex!(d::WignerMatrices,val,ind::Int) = (d.data[ind] = val)
+
+Base.axes(d::WignerMatrices) = (-d.j:d.j,vectorinds(d.j))
+Base.axes(d::WignerMatrices,dim::Int) = axes(d)[dim]
+
+Base.size(d::WignerMatrices) = map(length,axes(d))
+Base.size(d::WignerMatrices,dim::Int) = size(d)[dim]
+
+function Base.collect(d::WignerMatrices{T}) where {T}
+	dfull = zeros(T,axes(d)...)
+	for n in axes(dfull,2), m in axes(dfull,1)
+		dfull[m,n] = d[m,n]
+	end
+	dfull
+end
+
+##########################################################################
 # Wigner d matrix
 ##########################################################################
 
@@ -88,6 +186,7 @@ end
 
 function coeffi!(j,A)
 
+	@assert(length(A)>N^2,"array isn't long enough to store Jy")
 	N = 2j+1
 	fill!(A,zero(eltype(A)))
 	Av = reshape(@view(A[1:N^2]),N,N)
@@ -95,7 +194,7 @@ function coeffi!(j,A)
 
 	Av[1,1] = zero(ComplexF64)
 
-    for i in 1:N-1
+    @inbounds for i in 1:N-1
 	    Av[i,i+1]=-X(j,-j+i)/2im
 	end
 
@@ -130,130 +229,65 @@ end
 
 function djmatrix_terms(θ::Real,λ,v,m::Integer,n::Integer,j=div(length(λ)-1,2))
 	dj_m_n = zero(ComplexF64)
-	dj_m_n_πmθ = zero(ComplexF64)
-	dj_n_m = zero(ComplexF64)
 
 	@inbounds for μ in axes(λ,1)
 		temp  = v[μ,m] * conj(v[μ,n])
 
 		dj_m_n += cis(-λ[μ]*θ) * temp
-		if m != n
-			dj_n_m += cis(λ[μ]*θ) * temp
-		end
-		
-		dj_m_n_πmθ += cis(-λ[μ]*(π-θ)) * temp
 	end
 
-	dj_m_n,dj_m_n_πmθ,dj_n_m
+	dj_m_n
 end
 
 function djmatrix_terms(θ::NorthPole,λ,v,m::Integer,n::Integer,j=div(length(λ)-1,2))
 	dj_m_n = zero(ComplexF64)
-	dj_m_n_πmθ = zero(ComplexF64)
-	dj_n_m = zero(ComplexF64)
 
 	@inbounds for μ in axes(λ,1)
 		temp  = v[μ,m] * conj(v[μ,n])
 
 		dj_m_n += cis(0.0) * temp
-		if m != n
-			dj_n_m += cis(0.0) * temp
-		end
-		
-		dj_m_n_πmθ += cis(-λ[μ],SouthPole()) * temp
 	end
 
-	dj_m_n,dj_m_n_πmθ,dj_n_m
+	dj_m_n
 end
 
 function djmatrix_terms(θ::SouthPole,λ,v,m::Integer,n::Integer,j=div(length(λ)-1,2))
 	dj_m_n = zero(ComplexF64)
-	dj_m_n_πmθ = zero(ComplexF64)
-	dj_n_m = zero(ComplexF64)
 
 	@inbounds for μ in axes(λ,1)
 		temp  = v[μ,m] * conj(v[μ,n])
 
 		dj_m_n += cis(-λ[μ],θ) * temp
-		if m != n
-			dj_n_m += cis(λ[μ],θ) * temp
-		end
-		
-		dj_m_n_πmθ += cis(0.0) * temp
 	end
 
-	dj_m_n,dj_m_n_πmθ,dj_n_m
+	dj_m_n
 end
 
 function djmatrix_terms(θ::Equator,λ,v,m::Integer,n::Integer,j=div(length(λ)-1,2))
 	dj_m_n = zero(ComplexF64)
-	dj_n_m = zero(ComplexF64)
 
 	if !(isodd(j+m) && n == 0) && !(isodd(j+n) && m == 0)
 		@inbounds for μ in axes(λ,1)
 			temp  = v[μ,m] * conj(v[μ,n])
 
 			dj_m_n += cis(-λ[μ],θ) * temp
-			if m != n
-				dj_n_m += cis(λ[μ],θ) * temp
-			end
 		end
 	end
 
-	dj_m_n,dj_m_n,dj_n_m
+	dj_m_n
 end
 
-function djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v,inds_covered = falses(m_range,n_range))
+function djmatrix_fill!(d,j,θ,λ,v)
 
-	m_range = intersect(m_range,-j:j)
-	n_range = intersect(n_range,-j:j)
+	dʲ₀₀ = real(djmatrix_terms(θ,λ,v,0,0,j))
+	d.data[1] = dʲ₀₀
 
-	fill!(inds_covered,false)
-
-	for (m,n) in Iterators.product(m_range,n_range)
-
-		# check if symmetry conditions allow the index to be evaluated
-		inds_covered[m,n] && continue
-
-		dj_m_n,dj_m_n_πmθ,dj_n_m = map(real,djmatrix_terms(θ,λ,v,m,n,j))
-
-		dj[m,n] = dj_m_n
-		inds_covered[m,n] = true
-		if !iszero(m) && -m in m_range
-			dj[-m,n] = dj_m_n_πmθ*(-1)^(j+n)
-			inds_covered[-m,n] = true
-		end
-
-		if !iszero(n) && -n in n_range
-			dj[m,-n] = dj_m_n_πmθ*(-1)^(j+m)
-			inds_covered[m,-n] = true
-		end
-
-		if !(iszero(m) && iszero(n)) && -m in n_range && -n in m_range
-			dj[-n,-m] = dj_m_n
-			inds_covered[-n,-m] = true
-		end
-
-		if  !iszero(n) && m !=n && -n in n_range && -m in m_range
-			dj[-m,-n] = dj_n_m
-			inds_covered[-m,-n] = true
-		end
-
-		# transpose
-		if m != n && m in n_range && n in m_range
-			dj[n,m] = dj_n_m
-			inds_covered[n,m] = true
-		end
+	for m = 1:j, n = vectorinds(j)
+		d[m,n] = real(djmatrix_terms(θ,λ,v,m,n,j))
 	end
 
-	return dj
+	return d
 end
-
-struct djindices end
-struct GSHindices end
-struct OSHindices end
-
-vectorinds(j::Int) = iszero(j) ? Base.IdentityUnitRange(0:0) : Base.IdentityUnitRange(-1:1)
 
 function get_m_n_ranges(j,::djindices;kwargs...)
 	m_range = get(kwargs,:m_range,Base.IdentityUnitRange(-j:j))
@@ -276,35 +310,21 @@ end
 # Default to full range
 get_m_n_ranges(j;kwargs...) = get_m_n_ranges(j,djindices();kwargs...)
 
-function djmatrix!(dj,j,θ::Real,
-	A::Matrix{ComplexF64}=zeros(ComplexF64,2j+1,2j+1),
-	inds_covered = falses(axes(dj)); kwargs...)
 
-	m_range,n_range = get_m_n_ranges(j;kwargs...)
-
+function djmatrix!(dj,j,θ::Real,A::Matrix{ComplexF64}=zeros(ComplexF64,2j+1,2j+1))
 	λ,v = Jy_eigen!(j,A)
-
-	djmatrix_fill!(dj,j,θ,m_range,n_range,λ,v,inds_covered)
+	djmatrix_fill!(dj,j,θ,λ,v)
 end
 
-function djmatrix(j,θ;kwargs...)
-	m_range,n_range = get_m_n_ranges(j;kwargs...)
-	dj = zeros(m_range,n_range)
+djmatrix!(dj,j,x::SphericalPoint,args...) = djmatrix!(dj,j,x.θ,args...)
+
+function djmatrix(j,θ)
+	dj = ReduceddjMatrix(j)
 	A = zeros(ComplexF64,2j+1,2j+1)
-	inds_covered = falses(m_range,n_range)
-	djmatrix!(dj,j,θ,A,inds_covered;m_range=m_range,n_range=n_range,kwargs...)
+	djmatrix!(dj,j,θ,A)
 end
 
-djmatrix(j,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ;kwargs...)
-djmatrix(j,m,n,θ::Real;kwargs...) = djmatrix(j,θ,m_range=m:m,n_range=n:n;kwargs...)
-djmatrix(j,m,n,x::SphericalPoint;kwargs...) = djmatrix(j,x.θ,m_range=m:m,n_range=n:n;kwargs...)
-
-djmatrix!(dj::AbstractMatrix{<:Real},j,x::SphericalPoint,args...;kwargs...) = 
-	djmatrix!(dj,j,x.θ,args...;kwargs...)
-djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,θ::Real,args...;kwargs...) = 
-	djmatrix!(dj,j,θ,args...;m_range=m:m,n_range=n:n,kwargs...)
-djmatrix!(dj::AbstractMatrix{<:Real},j,m,n,x::SphericalPoint,args...;kwargs...) = 
-	djmatrix!(dj,j,x.θ,args...;m_range=m:m,n_range=n:n,kwargs...)
+djmatrix(j,x::SphericalPoint) = djmatrix(j,x.θ)
 
 ##########################################################################
 # Generalized spherical harmonics
@@ -347,31 +367,10 @@ function compute_YP!(lmax,(x,ϕ)::Tuple{Equator,Real},Y,P,coeff,
 	compute_Y && compute_y!(lmax,ϕ,P,Y)
 end
 
-function Ylmatrix(::GSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
-
-	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
-
-	dj_θ = djmatrix(l,θ;kwargs...,m_range=m_range,n_range=n_range)
-	Y = zeros(ComplexF64,axes(dj_θ)...)
-	Ylmatrix!(GSH(),Y,dj_θ,l,(θ,ϕ);n_range=n_range,kwargs...,compute_d_matrix=false)
-end
-
-function check_indices(arr,indranges)
-	for (dim,indrange) in enumerate(indranges)
-		all(map(x->x in axes(arr,dim),extrema(indrange))) || throw(BoundsError(arr,indranges))
-	end
-end
-
-function Ylmatrix(::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
-	(θ,ϕ)::Tuple{Real,Real};kwargs...)
-
-	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
-	
-	check_indices(dj_θ,(m_range,n_range))
-
-	Y = zeros(ComplexF64,m_range,n_range)
-	Ylmatrix!(GSH(),Y,dj_θ,l,(θ,ϕ);compute_d_matrix=false,
-		m_range=m_range,n_range=n_range,kwargs...)
+function Ylmatrix(::GSH,j::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
+	dj_θ = djmatrix(j,θ)
+	Y = GeneralizedY(j)
+	Ylmatrix!(GSH(),Y,dj_θ,j,(θ,ϕ);compute_d_matrix=false)
 end
 
 function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
@@ -379,20 +378,20 @@ function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
 	Ylmatrix!(OSH(),YSH,l,(θ,ϕ),P,coeff;kwargs...)
 end
 
-function Ylmatrix!(::GSH,Y::AbstractMatrix{<:Complex},dj_θ::AbstractMatrix{<:Real},
-	l::Integer,(θ,ϕ)::Tuple{Real,Real},args...;kwargs...)
-
-	m_range,n_range = get_m_n_ranges(l,GSHindices();kwargs...)
-
-	check_indices(dj_θ,(m_range,n_range))
-	check_indices(Y,(m_range,n_range))
+function Ylmatrix!(::GSH,Y::GeneralizedY,dj_θ::ReduceddjMatrix,
+	j::Integer,(θ,ϕ)::Tuple{Real,Real},args...;kwargs...)
 
 	if get(kwargs,:compute_d_matrix,true)
-		djmatrix!(dj_θ,l,θ,args...;kwargs...,m_range=m_range,n_range=n_range)
+		djmatrix!(dj_θ,j,θ,args...)
 	end
 
-	@inbounds for n in n_range,m in m_range
-		Y[m,n] = √((2l+1)/4π) * dj_θ[m,n] * cis(m*ϕ)
+	norm = √((2j+1)/4π)
+
+	for m in 0:j
+		pre = norm * cis(m*ϕ)
+		for n in vectorinds(j)
+			Y[m,n] = pre * dj_θ[m,n]
+		end
 	end
 	return Y
 end
@@ -410,43 +409,7 @@ function Ylmatrix!(::OSH,YSH::AbstractVector{<:Complex},
 	OffsetVector(YSH[index_y(l,m_range)],m_range)
 end
 
-Ylmatrix(::GSH,l::Integer,m::IntegerOrUnitRange,n::IntegerOrUnitRange,
-	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
-	Ylmatrix(GSH(),l,(θ,ϕ);kwargs...,
-		m_range=to_unitrange(m),n_range=to_unitrange(n))
-
-Ylmatrix(::OSH,l::Integer,m::IntegerOrUnitRange,
-	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
-	Ylmatrix(OSH(),l,(θ,ϕ);kwargs...,m_range=to_unitrange(m))
-
-Ylmatrix(::GSH,l::Integer,m::IntegerOrUnitRange,n::IntegerOrUnitRange,
-	x::SphericalPoint;kwargs...) = 
-	Ylmatrix(GSH(),l,(x.θ,x.ϕ);kwargs...,
-		m_range=to_unitrange(m),n_range=to_unitrange(n))
-
-Ylmatrix(::OSH,l::Integer,m::IntegerOrUnitRange,
-	x::SphericalPoint;kwargs...) = 
-	Ylmatrix(OSH(),l,(x.θ,x.ϕ);kwargs...,
-		m_range=to_unitrange(m))
-
-Ylmatrix(T::AbstractSH,l::Integer,x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...)
-
-Ylmatrix( ::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
-	m::IntegerOrUnitRange,n::IntegerOrUnitRange,
-	(θ,ϕ)::Tuple{Real,Real};kwargs...) = 
-	Ylmatrix(GSH(),dj_θ,l,(θ,ϕ);kwargs...,
-		m_range=to_unitrange(m),n_range=to_unitrange(n))
-
-Ylmatrix( ::GSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
-	m::IntegerOrUnitRange,n::IntegerOrUnitRange,
-	x::SphericalPoint;kwargs...) = 
-	Ylmatrix(GSH(),dj_θ,l,(x.θ,x.ϕ);kwargs...,
-		m_range=to_unitrange(m),n_range=to_unitrange(n))
-
-Ylmatrix( T::AbstractSH,dj_θ::AbstractMatrix{<:Real},l::Integer,
-	x::SphericalPoint;kwargs...) = 
-	Ylmatrix(T,dj_θ,l,(x.θ,x.ϕ);kwargs...)
+Ylmatrix(T::AbstractSH,l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...)
 
 ##########################################################################
 # Spherical harmonics
@@ -482,21 +445,21 @@ function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
 	P = SphericalHarmonics.allocate_p(lmax)
 	return YSH_n₁,YSH_n₂,P,coeff
 end
-function allocate_Y₁Y₂(::GSH,ℓ₁,ℓ₂;β=vectorinds(ℓ₁),γ=vectorinds(ℓ₂),kwargs...)
-	Yℓ₁n₁ = zeros(ComplexF64,-ℓ₁:ℓ₁,β)
-	Yℓ₂n₂ = zeros(ComplexF64,-ℓ₂:ℓ₂,γ)
-	dℓ₁n₁ = zeros(axes(Yℓ₁n₁))
-	dℓ₂n₂ = zeros(axes(Yℓ₂n₂))
+function allocate_Y₁Y₂(::GSH,j₁,j₂)
+	Yℓ₁n₁ = GeneralizedY(j₁)
+	Yℓ₂n₂ = GeneralizedY(j₂)
+	dℓ₁n₁ = ReduceddjMatrix(j₁)
+	dℓ₂n₂ = ReduceddjMatrix(j₂)
 	return Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂
 end
-@inline function allocate_Y₁Y₂(::GSH,lmax::Integer;kwargs...)
-	allocate_Y₁Y₂(GSH(),lmax,lmax;kwargs...)
+function allocate_Y₁Y₂(::GSH,lmax::Integer)
+	allocate_Y₁Y₂(GSH(),lmax,lmax)
 end
-function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ;kwargs...)
+function allocate_Y₁Y₂(::GSH,ℓ′ℓ_smax::L₂L₁Δ)
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
 	ll′max = max(lmax,l′max)
-	allocate_Y₁Y₂(GSH(),ll′max;kwargs...)
+	allocate_Y₁Y₂(GSH(),ll′max)
 end
 
 function SHModes_slice(SHModes::SHM,ℓ′,ℓ) where {SHM<:SHModeRange}
@@ -508,7 +471,7 @@ function SHModes_slice(SHModes::SHM,ℓ′,ℓ) where {SHM<:SHModeRange}
 	SHM(l_range_ℓ′ℓ,m_range_ℓ′ℓ)
 end
 
-function allocate_BSH(::OSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) where {SHM<:SHModeRange}
+function allocate_BSH(::OSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM) where {SHM<:SHModeRange}
 	T = SHVector{ComplexF64,Vector{ComplexF64},Tuple{SHM}}
 	Yℓ′ℓ = SHVector{T}(undef,ℓ′ℓ_smax)
 	for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
@@ -519,7 +482,7 @@ function allocate_BSH(::OSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) w
 	return Yℓ′ℓ
 end
 
-function allocate_BSH(::GSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) where {SHM<:SHModeRange}
+function allocate_BSH(::GSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM) where {SHM<:SHModeRange}
 
 	ℓ′,ℓ = first(ℓ′ℓ_smax)
 
@@ -528,77 +491,60 @@ function allocate_BSH(::GSH,ℓ′ℓ_smax::L₂L₁Δ,SHModes::SHM;kwargs...) w
 	γ = Base.IdentityUnitRange(-1:1)
 
 	T = SHArray{ComplexF64,3,OffsetArray{ComplexF64,3,Array{ComplexF64,3}},
-			Tuple{SHM,Base.IdentityUnitRange,Base.IdentityUnitRange},1}
+			Tuple{Base.IdentityUnitRange,Base.IdentityUnitRange,SHM},1}
 
 	Yℓ′ℓ = SHVector{T}(undef,ℓ′ℓ_smax)	
 
-	for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
+	@inbounds for (ind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ_smax)
 
 		modes_section = SHModes_slice(SHModes,ℓ′,ℓ)
-		Yℓ′ℓ[ind] = T(zeros(ComplexF64,length(modes_section),β,γ),
-			(modes_section,β,γ),(1,))
+		Yℓ′ℓ[ind] = T(zeros(ComplexF64,β,γ,length(modes_section)),
+			(β,γ,modes_section),(3,))
 	end
 	return Yℓ′ℓ
 end
 
 function allocate_BSH(ASH::AbstractSH,ℓ_range::AbstractUnitRange,
-	SHModes::SHModeRange;kwargs...)
+	SHModes::SHModeRange)
 
 	ℓ′ℓ_smax = L₂L₁Δ(ℓ_range,SHModes)
 	allocate_BSH(ASH,ℓ′ℓ_smax,SHModes)
 end
 
-function BiPoSH(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
-	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer;
-	β::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₁),
-	γ::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₂))
+function BiPoSH(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
+	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer;kwargs...)
 	
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 	@assert(abs(t)<=s,"abs(t)<=s not satisfied for t=$t and s=$s")
 
-	β,γ = map(to_unitrange,(β,γ))
+	Yℓ₁ℓ₂n₁n₂ = BiPoSH(GSH(),x1,x2,LM(s:s,t:t),ℓ₁,ℓ₂;kwargs...)
 
-	temp_arrs = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
-
-	Yℓ₁ℓ₂n₁n₂ = SHArray(LM(s:s,t:t),Base.IdentityUnitRange(-1:1),Base.IdentityUnitRange(-1:1))
-
-	BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,
-		temp_arrs...;β=β,γ=γ,
-		compute_dℓ₁=true,compute_dℓ₂=true,
-		compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
-
-	Yℓ₁ℓ₂n₁n₂[1,:,:]
+	Yℓ₁ℓ₂n₁n₂[:,:,1]
 end
 
 function BiPoSH(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
-	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer)
+	s::Integer,t::Integer,ℓ₁::Integer,ℓ₂::Integer;kwargs...)
 	
 	@assert(δ(ℓ₁,ℓ₂,s),"|ℓ₁-ℓ₂|<=s<=ℓ₁+ℓ₂ not satisfied for ℓ₁=$ℓ₁, ℓ₂=$ℓ₂ and s=$s")
 
 	Yℓ₁ℓ₂n₁n₂ = SHVector(LM(s:s,t:t))
 
 	BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ₁ℓ₂n₁n₂,ℓ₁,ℓ₂,
-		allocate_Y₁Y₂(OSH(),max(ℓ₁,ℓ₂))...,compute_Y₁=true,compute_Y₂=true)
+		allocate_Y₁Y₂(OSH(),max(ℓ₁,ℓ₂))...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true)
 
 	Yℓ₁ℓ₂n₁n₂[1]
 end
 
 function BiPoSH(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,args...;
-	β::Union{Integer,AbstractUnitRange} = vectorinds(ℓ₁),
-	γ::Union{Integer,AbstractUnitRange} = vectorinds(ℓ₂),
-	kwargs...)
-
-	β,γ = map(to_unitrange,(β,γ))
+	SHModes::SHModeRange,ℓ₁::Integer,ℓ₂::Integer,args...;kwargs...)
 
 	modes_section = SHModes_slice(SHModes,ℓ₁,ℓ₂)
-	B = SHArray(modes_section,Base.IdentityUnitRange(-1:1),Base.IdentityUnitRange(-1:1))
+	B = SHArray(Base.IdentityUnitRange(-1:1),Base.IdentityUnitRange(-1:1),modes_section)
+	Y_and_d_arrs = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂)
 
-	temp_arrs = allocate_Y₁Y₂(GSH(),ℓ₁,ℓ₂,β=β,γ=γ)
-
-	BiPoSH!(GSH(),x1,x2,B,ℓ₁,ℓ₂,
-		temp_arrs...,args...;
-		kwargs...,β=β,γ=γ,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
+	BiPoSH!(GSH(),x1,x2,B,ℓ₁,ℓ₂,Y_and_d_arrs...,args...;
+		kwargs...,compute_Yℓ₁n₁=true,compute_Yℓ₂n₂=true)
 end
 
 function BiPoSH(::OSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -617,13 +563,13 @@ function BiPoSH(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ,
 	args...;kwargs...) where {SHM<:SHModeRange}
 
-	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
+	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes)
 
 	lmax = maximum(l₁_range(ℓ′ℓ_smax))
 	l′max = maximum(l₂_range(ℓ′ℓ_smax))
 
 	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,ℓ′ℓ_smax,
-		allocate_Y₁Y₂(ASH,max(l′max,lmax);kwargs...)...,args...;
+		allocate_Y₁Y₂(ASH,max(l′max,lmax))...,args...;
 		kwargs...,compute_Y₁=true,compute_Y₂=true)
 end
 
@@ -634,33 +580,16 @@ BiPoSH(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
 BiPoSH(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
 	BiPoSH(ASH,(x1.θ,x1.ϕ),(x2.θ,x2.ϕ),args...;kwargs...)
 
-maybeslice(::OSH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...) = (Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁)
-
-function maybeslice(::GSH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...)
-	β = get(kwargs,:β,Base.IdentityUnitRange(-1:1))
-	γ = get(kwargs,:γ,Base.IdentityUnitRange(-1:1))
-
-	if (β != -1:1) || (γ != -1:1)
-		Yℓ′n₁ℓn₂ = SHVector([SHArray(sa[:,β,γ],(SHModes,),(1,)) for sa in Yℓ′n₁ℓn₂],ℓ′ℓ_smax)
-		Yℓ′n₂ℓn₁ = SHVector([SHArray(sa[:,β,γ],(SHModes,),(1,)) for sa in Yℓ′n₂ℓn₁],ℓ′ℓ_smax)
-	end
-
-	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁
-end
-
 function BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ,args...;kwargs...) where {SHM<:SHModeRange}
+	SHModes::SHM,ℓ′ℓ_smax::L₂L₁Δ;kwargs...) where {SHM<:SHModeRange}
 
-	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
-	Yℓ′n₂ℓn₁ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes;kwargs...)
+	Yℓ′n₁ℓn₂ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes)
+	Yℓ′n₂ℓn₁ = allocate_BSH(ASH,ℓ′ℓ_smax,SHModes)
 
-	Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂ = allocate_Y₁Y₂(ASH,ℓ′ℓ_smax;kwargs...,β=-1:1,γ=-1:1)
+	Y_and_d_arrs = allocate_Y₁Y₂(ASH,ℓ′ℓ_smax)
 
-	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,args...;
-		kwargs...,compute_Y₁=true,compute_Y₂=true,β=-1:1,γ=-1:1)
-
-	# Slicing, if any, happens after the calculation is done
-	Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁ = maybeslice(ASH,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁;kwargs...)
+	BiPoSH!(ASH,x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,Y_and_d_arrs...;
+		kwargs...,compute_Y₁=true,compute_Y₂=true)
 end
 
 BiPoSH_n1n2_n2n1(ASH::AbstractSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
@@ -698,7 +627,7 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[index_y(ℓ₂)]),-ℓ₂:ℓ₂)
 		
 		BiPoSH_compute!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
-			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;kwargs...,w3j=w3j,CG=CG)
+			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;w3j=w3j,CG=CG)
 	finally
 		Libdl.dlclose(lib)
 	end
@@ -714,22 +643,16 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	B::AbstractArray{<:Complex,3},
 	SHModes::SHModeRange,
 	ℓ₁::Integer,ℓ₂::Integer,
-	Yℓ₁n₁::AbstractMatrix{<:Complex},
-	Yℓ₂n₂::AbstractMatrix{<:Complex},
-	dℓ₁n₁::AbstractMatrix{<:Real},
-	dℓ₂n₂::AbstractMatrix{<:Real},
-	A_djcoeffi = zeros(ComplexF64,2max(ℓ₁,ℓ₂)+1,2max(ℓ₁,ℓ₂)+1),
-	dj_inds_flag = falses(-(max(ℓ₁,ℓ₂)+1):(max(ℓ₁,ℓ₂)+1),-(max(ℓ₁,ℓ₂)+1):(max(ℓ₁,ℓ₂)+1));
+	Yℓ₁n₁::GeneralizedY,
+	Yℓ₂n₂::GeneralizedY,
+	dℓ₁n₁::ReduceddjMatrix,
+	dℓ₂n₂::ReduceddjMatrix,
+	A_djcoeffi = zeros(ComplexF64,2max(ℓ₁,ℓ₂)+1,2max(ℓ₁,ℓ₂)+1);
 	compute_Y₁=true,compute_Y₂=true,
-	β::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₁),
-	γ::Union{AbstractUnitRange,Integer}=vectorinds(ℓ₂),
 	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),kwargs...)
 
-	β = intersect(to_unitrange(β),vectorinds(ℓ₁))
-	γ = intersect(to_unitrange(γ),vectorinds(ℓ₂))
-
-	compute_Y₁ && Ylmatrix!(GSH(),Yℓ₁n₁,dℓ₁n₁,ℓ₁,(θ₁,ϕ₁),A_djcoeffi,dj_inds_flag,n_range=β)
-	compute_Y₂ && Ylmatrix!(GSH(),Yℓ₂n₂,dℓ₂n₂,ℓ₂,(θ₂,ϕ₂),A_djcoeffi,dj_inds_flag,n_range=γ,
+	compute_Y₁ && Ylmatrix!(GSH(),Yℓ₁n₁,dℓ₁n₁,ℓ₁,(θ₁,ϕ₁),A_djcoeffi)
+	compute_Y₂ && Ylmatrix!(GSH(),Yℓ₂n₂,dℓ₂n₂,ℓ₂,(θ₂,ϕ₂),A_djcoeffi,
 					# don't recompute dj if unnecessary
 					compute_d_matrix = !( compute_Y₁ && (ℓ₁ == ℓ₂) && (θ₁ == θ₂) && (dℓ₁n₁ === dℓ₂n₂) ) )
 
@@ -741,7 +664,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 		end
 
 		BiPoSH_compute!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
-			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;kwargs...,w3j=w3j,CG=CG,β=β,γ=γ)
+			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr;w3j=w3j,CG=CG)
 	finally
 		Libdl.dlclose(lib)
 	end
@@ -750,7 +673,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 end
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	B::SHArrayOnlyFirstAxis,ℓ₁::Integer,args...;kwargs...) = 
+	B::SHArrayOneAxis,ℓ₁::Integer,args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,B,shmodes(B),ℓ₁,args...;kwargs...)
 
 @inline BiPoSH!(ASH::AbstractSH,x1::SphericalPoint,x2::SphericalPoint,args...;kwargs...) = 
@@ -804,10 +727,10 @@ end
 function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
 	Yℓ′n₁ℓn₂::AbstractVector{<:SHArray{<:Number,3}},
 	ℓ′ℓ_smax::L₂L₁Δ,
-	Yℓ₁n₁::AbstractMatrix{<:Complex},
-	Yℓ₂n₂::AbstractMatrix{<:Complex},
-	dℓ₁n₁::AbstractMatrix{<:Real},
-	dℓ₂n₂::AbstractMatrix{<:Real};
+	Yℓ₁n₁::GeneralizedY,
+	Yℓ₂n₂::GeneralizedY,
+	dℓ₁n₁::ReduceddjMatrix,
+	dℓ₂n₂::ReduceddjMatrix;
 	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
 	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	wig3j_fn_ptr=nothing,
@@ -818,7 +741,6 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	l′lmax = max(lmax,l′max)
 
 	A_djcoeffi = zeros(ComplexF64,2l′lmax+1,2l′lmax+1)
-	dj_inds_flag = falses(-l′lmax:l′lmax,-l′lmax:l′lmax)
 
 	lib = nothing
 
@@ -832,7 +754,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 
 			BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂[ℓ′ℓind],
 				shmodes(Yℓ′n₁ℓn₂[ℓ′ℓind]),ℓ′,ℓ,
-				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,A_djcoeffi,dj_inds_flag;
+				Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,dℓ₂n₂,A_djcoeffi;
 				CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 				compute_Y₁=compute_Y₁,compute_Y₂=compute_Y₂)
 		end
@@ -849,7 +771,7 @@ end
 	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOnlyFirstAxis},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOneAxis},
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
@@ -918,12 +840,12 @@ function BiPoSH!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 				BiPoSH!(OSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Yℓ′n₂ℓn₁_st,ℓ′,ℓ,
 					YSH_n₂,YSH_n₁,P,coeff;
 					CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
+					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 
 				BiPoSH!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Yℓ′n₁ℓn₂_st,ℓ′,ℓ,
 					YSH_n₁,YSH_n₂,P,coeff;
 					CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
-					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂,kwargs...)
+					compute_Y₁=!compute_Y₁,compute_Y₂=!compute_Y₂)
 			end
 		end
 	finally
@@ -937,10 +859,10 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	Yℓ′n₁ℓn₂::AbstractVector{<:SHArray{<:Number,3}},
 	Yℓ′n₂ℓn₁::AbstractVector{<:SHArray{<:Number,3}},
 	ℓ′ℓ_smax::L₂L₁Δ,
-	Yℓ₁n₁::AbstractMatrix{<:Complex},
-	Yℓ₂n₂::AbstractMatrix{<:Complex},
-	dℓ₁n₁::AbstractMatrix{<:Real},
-	dℓ₂n₂::AbstractMatrix{<:Real};
+	Yℓ₁n₁::GeneralizedY,
+	Yℓ₂n₂::GeneralizedY,
+	dℓ₁n₁::ReduceddjMatrix,
+	dℓ₂n₂::ReduceddjMatrix;
 	CG = zeros( 0:(maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax))) ),
 	w3j = zeros( maximum(l₁_range(ℓ′ℓ_smax)) + maximum(l₂_range(ℓ′ℓ_smax)) + 1),
 	compute_Y₁=true,compute_Y₂=true,kwargs...)
@@ -950,7 +872,6 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 	l′lmax = max(lmax,l′max)
 
 	A_djcoeffi = zeros(ComplexF64,2l′lmax+1,2l′lmax+1)
-	dj_inds_flag = falses(-l′lmax:l′lmax,-l′lmax:l′lmax)
 
 	lib = nothing
 
@@ -975,7 +896,7 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 			# Precomputation of the RHS would have happened if j₂ < j₁, 
 			# as the modes are sorted in order of increasing j₁
 
-			if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁
+			if (j₁,j₂) in ℓ′ℓ_smax && j₂ < j₁ && !iszero(j₂)
 				# In this case Pʲ¹ʲ²ₗₘ_α₁α₂(n₁,n₂) and Pʲ¹ʲ²ₗₘ_α₁α₂(n₂,n₁) have already been computed
 				# This means we may evaluate Pʲ²ʲ¹ₗₘ_α₂α₁(n₂,n₁) and Pʲ²ʲ¹ₗₘ_α₂α₁(n₁,n₂) using the formulae
 				# presented above
@@ -985,11 +906,11 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 				Pʲ¹ʲ²ₗₘ_n₁n₂ = Yℓ′n₁ℓn₂[ind_j₁j₂]
 				Pʲ¹ʲ²ₗₘ_n₂n₁ = Yℓ′n₂ℓn₁[ind_j₁j₂]
 
-				for α₂ in vectorinds(j₂), α₁ in vectorinds(j₁)
-					for (ind_lm,(l,m)) in enumerate(lm_iter)
-						phase = (-1)^(j₁+j₂+l)
-						Pʲ²ʲ¹ₗₘ_n₂n₁[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₁n₂[ind_lm,α₁,α₂]
-						Pʲ²ʲ¹ₗₘ_n₁n₂[ind_lm,α₂,α₁] = phase * Pʲ¹ʲ²ₗₘ_n₂n₁[ind_lm,α₁,α₂]
+				for (ind_lm,(l,m)) in enumerate(lm_iter)
+					phase = (-1)^(j₁+j₂+l)
+					for α₂ in vectorinds(j₂), α₁ in vectorinds(j₁)
+						Pʲ²ʲ¹ₗₘ_n₂n₁[α₂,α₁,ind_lm] = phase * Pʲ¹ʲ²ₗₘ_n₁n₂[α₁,α₂,ind_lm]
+						Pʲ²ʲ¹ₗₘ_n₁n₂[α₂,α₁,ind_lm] = phase * Pʲ¹ʲ²ₗₘ_n₂n₁[α₁,α₂,ind_lm]
 					end
 				end
 			else
@@ -998,12 +919,12 @@ function BiPoSH!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real
 				d2 = (j₁ == j₂) && (θ₁ == θ₂) ? dℓ₁n₁ : dℓ₂n₂
 
 				BiPoSH!(GSH(),(θ₂,ϕ₂),(θ₁,ϕ₁),Pʲ²ʲ¹ₗₘ_n₂n₁,j₂,j₁,
-					Yℓ₂n₂,Yℓ₁n₁,d2,dℓ₁n₁,A_djcoeffi,dj_inds_flag;
+					Yℓ₂n₂,Yℓ₁n₁,d2,dℓ₁n₁,A_djcoeffi;
 					kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 					compute_Y₁=true,compute_Y₂=true)
 
 				BiPoSH!(GSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),Pʲ²ʲ¹ₗₘ_n₁n₂,j₂,j₁,
-					Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,d2,A_djcoeffi,dj_inds_flag;
+					Yℓ₁n₁,Yℓ₂n₂,dℓ₁n₁,d2,A_djcoeffi;
 					kwargs...,CG=CG,w3j=w3j,wig3j_fn_ptr=wig3j_fn_ptr,
 					compute_Y₁=(j₁ != j₂),compute_Y₂=(j₁ != j₂))
 			end
@@ -1021,8 +942,8 @@ end
 	BiPoSH!(OSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
 @inline BiPoSH!(::GSH,x1::Tuple{Real,Real},x2::Tuple{Real,Real},
-	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOnlyFirstAxis},
-	Yℓ′n₂ℓn₁::SHVector{<:SHArrayOnlyFirstAxis},
+	Yℓ′n₁ℓn₂::SHVector{<:SHArrayOneAxis},
+	Yℓ′n₂ℓn₁::SHVector{<:SHArrayOneAxis},
 	Y1::AbstractMatrix{<:Complex},args...;kwargs...) = 
 	BiPoSH!(GSH(),x1,x2,Yℓ′n₁ℓn₂,Yℓ′n₂ℓn₁,shmodes(Yℓ′n₁ℓn₂),Y1,args...;kwargs...)
 
@@ -1030,97 +951,82 @@ end
 # (θ₁,ϕ₁) and (θ₂,ϕ₂). The BiPoSH! functions call these.
 # We assume that the monopolar YSH are already computed in the BiPoSH! calls
 function BiPoSH_compute!(::GSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
-	Yℓ₁ℓ₂n₁n₂::AbstractArray{<:Number,3},
-	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
-	Yℓ₁n₁::AbstractMatrix{<:Number},Yℓ₂n₂::AbstractMatrix{<:Number},wig3j_fn_ptr;
-	β::AbstractUnitRange=vectorinds(ℓ₁),γ::AbstractUnitRange=vectorinds(ℓ₂),
-	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),
-	kwargs...)
+	Yj₁j₂n₁n₂::AbstractArray{<:Number,3},
+	lm_modes::LM,j₁::Integer,j₂::Integer,
+	Yj₁n₁::GeneralizedY,Yj₂n₂::GeneralizedY,wig3j_fn_ptr;
+	w3j = zeros(j₁+j₂+1),CG = zeros(0:j₁+j₂))
 
-	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
+	fill!(Yj₁j₂n₁n₂,zero(eltype(Yj₁j₂n₁n₂)))
 
-	lm_modes_ℓ₁ℓ₂ = SHModes_slice(lm_modes,ℓ₁,ℓ₂)
-	l_valid = l_range(lm_modes_ℓ₁ℓ₂)
-	m_valid = m_range(lm_modes_ℓ₁ℓ₂)
-	β_valid = intersect(β,axes(Yℓ₁ℓ₂n₁n₂,2))
-	γ_valid = intersect(γ,axes(Yℓ₁ℓ₂n₁n₂,3))
+	lm_modes_j₁j₂ = SHModes_slice(lm_modes,j₁,j₂)
+	l_valid = l_range(lm_modes_j₁j₂)
+	m_valid = m_range(lm_modes_j₁j₂)
+	β_valid = vectorinds(j₁)
+	γ_valid = vectorinds(j₂)
 
-	for γ in γ_valid
-		
-		Yℓ₂n₂γ = @view Yℓ₂n₂[:,γ]
+	m_compute = (sign(minimum(m_valid)) == sign(maximum(m_valid))) ? m_valid : (0:maximum(m_valid))
+	m_symmetry = (sign(minimum(m_valid)) == sign(maximum(m_valid))) ? (0:-1) : (minimum(m_valid):-1)
 
-		for β in β_valid
-			
-			Yℓ₁n₁β = @view Yℓ₁n₁[:,β]
+	@inbounds for m in m_compute
 
-			Yℓ₁ℓ₂n₁n₂βγ = @view Yℓ₁ℓ₂n₁n₂[:,β,γ]
-			Yℓ₁ℓ₂n₁n₂₋β₋γ = @view Yℓ₁ℓ₂n₁n₂[:,-β,-γ]
+		lrange_m = l_range(lm_modes_j₁j₂,m)
+		first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
 
-			for m in m_valid
+		for m₁ in -j₁:j₁
 
-				lrange_m = l_range(lm_modes_ℓ₁ℓ₂,m)
-				first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
+			m₂ = m - m₁
+			abs(m₂) > j₂ && continue
 
-				conjcond = -m in m_valid && -γ in γ_valid && -β in β_valid && 
-					-m <= m &&  -γ <= γ && -β <= β && (β != 0 && γ != 0)
+			CG_l₁m₁_l₂m₂_lm!(j₁,m₁,j₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
 
-				if conjcond
+			for (ind,l) in enumerate(lrange_m)
 
-					# In this case we may use the conjugation relations
-					# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
+				l_ind = (ind - 1) + first_l_ind # l's increase faster than m
 
-					allmodes_covered = true
+				Cˡᵐⱼ₁ₘ₁ⱼ₂ₘ₂ = CG[l]
+				iszero(Cˡᵐⱼ₁ₘ₁ⱼ₂ₘ₂) && continue
 
-					for (ind,l) in enumerate(lrange_m)
-						if (l,-m) ∉ lm_modes
-							allmodes_covered = false
-							continue
-						end
-						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
-						l₋mind = modeindex(lm_modes,(l,-m))
-						Yℓ₁ℓ₂n₁n₂βγ[l_ind] = (-1)^(ℓ₁+ℓ₂+l+m+β+γ) * conj(Yℓ₁ℓ₂n₁n₂₋β₋γ[l₋mind])
-					end
-
-					allmodes_covered && continue
-				end
-				
-				for m₁ in -ℓ₁:ℓ₁
-		
-					m₂ = m - m₁
-					abs(m₂) > ℓ₂ && continue
-
-					CG_l₁m₁_l₂m₂_lm!(ℓ₁,m₁,ℓ₂,m,CG,w3j;wig3j_fn_ptr=wig3j_fn_ptr)
-
-					Yℓ₁n₁βYℓ₂n₂γ = Yℓ₁n₁β[m₁]*Yℓ₂n₂γ[m₂]
-
-					for (ind,l) in enumerate(lrange_m)
-						conjcond && (l,-m) in lm_modes && continue
-						l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
-						Yℓ₁ℓ₂n₁n₂βγ[l_ind] += CG[l]*Yℓ₁n₁βYℓ₂n₂γ
-					end
+				for γ in γ_valid, β in β_valid
+					Yj₁j₂n₁n₂[β,γ,l_ind] += Cˡᵐⱼ₁ₘ₁ⱼ₂ₘ₂ * Yj₁n₁[m₁,β] * Yj₂n₂[m₂,γ]
 				end
 			end
 		end
 	end
 
 	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid && 0 in β_valid && 0 in γ_valid
-		lrange_m = l_range(lm_modes_ℓ₁ℓ₂,0)
-		first_l_ind = modeindex(lm_modes,(first(lrange_m),0))
-
-		for (ind,l) in enumerate(lrange_m)
-			l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
-			if isodd(ℓ₁+ℓ₂+l)
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes_j₁j₂,(l,0))
+			if isodd(j₁+j₂+l)
 				# in this case the term is purely imaginary
-				Yℓ₁ℓ₂n₁n₂[l_ind,0,0] = Complex(0,imag(Yℓ₁ℓ₂n₁n₂[l_ind,0,0]))
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
 			else
 				# in this case the term is purely real
-				Yℓ₁ℓ₂n₁n₂[l_ind,0,0] = Complex(real(Yℓ₁ℓ₂n₁n₂[l_ind,0,0]),0)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
 			end
 		end
 	end
 
-	return Yℓ₁ℓ₂n₁n₂
+	@inbounds for m in m_symmetry
+		
+		lrange_m = l_range(lm_modes_j₁j₂,m)
+		first_l_ind = modeindex(lm_modes,(first(lrange_m),m))
+
+		for (ind,l) in enumerate(lrange_m)
+			l_ind = (ind - 1) + first_l_ind # l's are stored contiguously
+			l₋mind = modeindex(lm_modes,(l,-m))
+			
+			for γ in γ_valid, β in β_valid
+				
+				# In this case we may use the conjugation relations
+				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
+
+				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[-β,-γ,l₋mind])
+			end
+		end
+	end
+
+	return Yj₁j₂n₁n₂
 end
 
 function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tuple{Real,Real},
@@ -1128,7 +1034,7 @@ function BiPoSH_compute!(::OSH,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tu
 	lm_modes::LM,ℓ₁::Integer,ℓ₂::Integer,
 	Yℓ₁n₁::AbstractVector{<:Number},
 	Yℓ₂n₂::AbstractVector{<:Number},wig3j_fn_ptr;
-	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂),kwargs...)
+	w3j = zeros(ℓ₁+ℓ₂+1),CG = zeros(0:ℓ₁+ℓ₂))
 
 	fill!(Yℓ₁ℓ₂n₁n₂,zero(eltype(Yℓ₁ℓ₂n₁n₂)))
 

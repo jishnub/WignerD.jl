@@ -1,6 +1,6 @@
 name = "WignerD"
 uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-version = "0.2.1"
+version = "0.3.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
