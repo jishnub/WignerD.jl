@@ -186,8 +186,8 @@ end
 
 function coeffi!(j,A)
 
-	@assert(length(A)>N^2,"array isn't long enough to store Jy")
 	N = 2j+1
+	@assert(length(A)>=N^2,"array isn't long enough to store Jy")
 	fill!(A,zero(eltype(A)))
 	Av = reshape(@view(A[1:N^2]),N,N)
 	h = Hermitian(Av)
