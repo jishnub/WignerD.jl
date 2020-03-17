@@ -158,19 +158,19 @@ end
 
 @testset "Clebsch-Gordan" begin
 	@testset "allocating" begin
-		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,1,1)
+		CG = WignerD.CG_j₁m₁_j₂m₂_lm(1,1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,1,1,-1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,-1,1)
+		CG = WignerD.CG_j₁m₁_j₂m₂_lm(1,-1,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,-1,1,1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,-1,1,1,1,0) ≈ -1/√2
 		@test CG[2] ≈ WignerD.clebschgordan(1,-1,1,1,2,0) ≈ 1/√6
 
-		CG = WignerD.CG_l₁m₁_l₂m₂_lm(1,0,1)
+		CG = WignerD.CG_j₁m₁_j₂m₂_lm(1,0,1)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,0,1,0,0,0) ≈ -1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,0,1,0,1,0) ≈ 0
@@ -179,7 +179,7 @@ end
 	@testset "non-allocating" begin
 		CG = zeros(0:2)
 
-		WignerD.CG_l₁m₁_l₂m₂_lm!(1,1,1,0,CG)
+		WignerD.CG_j₁m₁_j₂m₂_lm!(1,1,1,0,CG)
 
 		@test CG[0] ≈ WignerD.clebschgordan(1,1,1,-1,0,0) ≈ 1/√3
 		@test CG[1] ≈ WignerD.clebschgordan(1,1,1,-1,1,0) ≈ 1/√2
@@ -199,7 +199,7 @@ end
 		for j1=0:5,j2=0:5
 			smin,smax = abs(j1-j2),j1+j2
 			for m=-j1:j1,t=max(-smax,-j2+m):min(smax,j2+m)
-				CG = WignerD.CG_l₁m₁_l₂m₂_lm(j1,m,j2,t)[max(abs(t),smin):smax]
+				CG = WignerD.CG_j₁m₁_j₂m₂_lm(j1,m,j2,t)[max(abs(t),smin):smax]
 				CGW = [WignerD.clebschgordan(j1,m,j2,t-m,s,t) for s=max(abs(t),smin):smax]
 				@test CG ≈ CGW
 			end
@@ -252,7 +252,7 @@ end
 @testset "Y1100 explicit" begin
 	n1 = Point2D(π*rand(),2π*rand())
 	n2 = Point2D(π*rand(),2π*rand())
-	@test BiPoSH(OSH(),n1,n2,0,0,1,1) ≈ -√3/4π * cosχ(n1,n2)
+	@test BiPoSH(OSH(),nothing,n1,n2,0,0,1,1) ≈ -√3/4π * cosχ(n1,n2)
 end
 	
 @testset "Yℓℓ_00" begin
@@ -268,7 +268,7 @@ end
 	
 	YB_00 = OffsetArray{ComplexF64}(undef,1:ℓmax)
 	for ℓ in axes(YB_00,1)
-		YB_00[ℓ] = BiPoSH(OSH(),n1,n2,0,0,ℓ,ℓ)
+		YB_00[ℓ] = BiPoSH(OSH(),nothing,n1,n2,0,0,ℓ,ℓ)
 	end
 	
 	@test Yℓℓ_00 ≈ YB_00
@@ -288,8 +288,8 @@ end
 	YB_10_n1n2 = OffsetArray{ComplexF64}(undef,1:ℓmax)
 	YB_10_n2n1 = OffsetArray{ComplexF64}(undef,1:ℓmax)
 	for ℓ in 1:ℓmax
-		YB_10_n1n2[ℓ] = BiPoSH(OSH(),n1,n2,1,0,ℓ,ℓ)
-		YB_10_n2n1[ℓ] = BiPoSH(OSH(),n2,n1,1,0,ℓ,ℓ)
+		YB_10_n1n2[ℓ] = BiPoSH(OSH(),nothing,n1,n2,1,0,ℓ,ℓ)
+		YB_10_n2n1[ℓ] = BiPoSH(OSH(),nothing,n2,n1,1,0,ℓ,ℓ)
 	end
 	
 	@test Yℓℓ_10 ≈ YB_10_n1n2
@@ -346,12 +346,12 @@ end
 
 	for ℓ in axes(Yℓℓ_10,1)
 		
-		BiPoSH!(OSH(),n1,n2,B,ℓ,ℓ,YSH1,YSH2,P,coeff,
+		BiPoSH!(OSH(),nothing,n1,n2,B,ℓ,ℓ,YSH1,YSH2,P,coeff,
 			compute_Y₁=false,compute_Y₂=false);
 		
 		YB_10_n1n2[ℓ] = B[(1,0)]
 
-		BiPoSH!(OSH(),n2,n1,B,ℓ,ℓ,YSH2,YSH1,P,coeff,
+		BiPoSH!(OSH(),nothing,n2,n1,B,ℓ,ℓ,YSH2,YSH1,P,coeff,
 			compute_Y₁=false,compute_Y₂=false);
 
 		YB_10_n2n1[ℓ] = B[(1,0)]
@@ -361,7 +361,7 @@ end
 	@test YB_10_n1n2 ≈ -YB_10_n2n1
 end
 
-@testset "BiPoSH GSH explicit for m=0" begin
+@testset "BiPoSH PB GSH explicit for m=0" begin
 	n1 = Point2D(π/2,π/4)
 	n2 = Point2D(π/2,π/2)
 	Δϕ₁₂ = n1.ϕ - n2.ϕ
@@ -369,7 +369,7 @@ end
 	j = 1
 
     @testset "l=0" begin
-        B = BiPoSH(GSH(),n1,n2,0,0,j,j)
+        B = BiPoSH(GSH(),PB(),n1,n2,0,0,j,j)
         B_exp = [√3/8π*(-1 + cosh(im*Δϕ₁₂))    √(3/2)/4π*sinh(im*Δϕ₁₂)     √3/8π*(1 + cosh(im*Δϕ₁₂)) 
        			-√(3/2)/4π*sinh(im*Δϕ₁₂)       -√3/4π*cosh(im*Δϕ₁₂)       -√(3/2)/4π*sinh(im*Δϕ₁₂) 
        			√3/8π*(1 + cosh(im*Δϕ₁₂))     √(3/2)/4π*sinh(im*Δϕ₁₂)      √3/8π*(-1 + cosh(im*Δϕ₁₂))]
@@ -377,7 +377,7 @@ end
        	@test parent(B) ≈ B_exp
    end
    @testset "l=1" begin
-        B = BiPoSH(GSH(),n1,n2,1,0,j,j)
+        B = BiPoSH(GSH(),PB(),n1,n2,1,0,j,j)
         B_exp = [3/(8*√2π)*sinh(im*Δϕ₁₂)    3/8π*cosh(im*Δϕ₁₂)     3/(8*√2π)*sinh(im*Δϕ₁₂) 
        			-3/8π*cosh(im*Δϕ₁₂)       -3/(4*√2π)*sinh(im*Δϕ₁₂)      -3/8π*cosh(im*Δϕ₁₂) 
        			3/(8*√2π)*sinh(im*Δϕ₁₂)     3/8π*cosh(im*Δϕ₁₂)      3/(8*√2π)*sinh(im*Δϕ₁₂)]
@@ -385,7 +385,7 @@ end
        	@test parent(B) ≈ B_exp
    end
    @testset "l=2" begin
-        B = BiPoSH(GSH(),n1,n2,2,0,j,j)
+        B = BiPoSH(GSH(),PB(),n1,n2,2,0,j,j)
         B_exp = [√(3/2)/8π*(2 + cosh(im*Δϕ₁₂))    √3/8π*sinh(im*Δϕ₁₂)       √(3/2)/8π*(-2 + cosh(im*Δϕ₁₂)) 
        			 -√3/8π*sinh(im*Δϕ₁₂)            -√(3/2)/4π*cosh(im*Δϕ₁₂)   -√3/8π*sinh(im*Δϕ₁₂) 
        			 √(3/2)/8π*(-2 + cosh(im*Δϕ₁₂))   √3/8π*sinh(im*Δϕ₁₂)       √(3/2)/8π*(2 + cosh(im*Δϕ₁₂)) ]
@@ -394,15 +394,15 @@ end
    end
 end
 
-@testset "BiPoSH OSH and GSH" begin
+@testset "BiPoSH OSH and PB GSH" begin
 	n1 = Point2D(π/3,π/4)
 	n2 = Point2D(π/3,π/3)
 	s_max = 3
 	SHModes = LM(0:s_max);
 	for j₁ in 0:3, j₂ in 0:3
 		WignerD.δ(j₁,j₂,s_max) || continue
-	    B_GSH=BiPoSH(GSH(),n1,n2,SHModes,j₂,j₁)
-	    B_OSH=BiPoSH(OSH(),n1,n2,SHModes,j₂,j₁)
+	    B_GSH=BiPoSH(GSH(),PB(),n1,n2,SHModes,j₂,j₁)
+	    B_OSH=BiPoSH(OSH(),nothing,n1,n2,SHModes,j₂,j₁)
     	@test begin
     		res = B_GSH[0,0,:] ≈ B_OSH
     		if !res
@@ -413,14 +413,14 @@ end
     end
 end
 
-@testset "BiPoSH conjugate" begin
+@testset "BiPoSH PB conjugate" begin
     n1 = Point2D(π/3,π/4)
 	n2 = Point2D(π/3,π/3)
 
 	@testset "OSH" begin
 		@testset "m=0" begin
 		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂
-		    	B = BiPoSH(OSH(),n1,n2,l,0,j₁,j₂)
+		    	B = BiPoSH(OSH(),nothing,n1,n2,l,0,j₁,j₂)
 		    	if iseven(j₁+j₂+l)
 		    		@test B == real(B)
 		    	else
@@ -430,8 +430,8 @@ end
 		end
 		@testset "m and -m" begin
 		    for j₁ = 1:3, j₂ = 1:3, l = abs(j₁-j₂):j₁+j₂, m=-l:l
-		    	Bm = BiPoSH(OSH(),n1,n2,l,m,j₁,j₂)
-		    	B₋m = BiPoSH(OSH(),n1,n2,l,-m,j₁,j₂)
+		    	Bm = BiPoSH(OSH(),nothing,n1,n2,l,m,j₁,j₂)
+		    	B₋m = BiPoSH(OSH(),nothing,n1,n2,l,-m,j₁,j₂)
 		    	@test Bm ≈ (-1)^(j₁+j₂+l+m)*conj(B₋m)
 		    end
 		end
@@ -441,7 +441,7 @@ end
 	    @testset "m=0" begin
 			function testconj(l,j₁,j₂)
 			    phase = (-1)^(j₁+j₂+l)
-			    b = BiPoSH(GSH(),n1,n2,l,0,j₁,j₂)
+			    b = BiPoSH(GSH(),PB(),n1,n2,l,0,j₁,j₂)
 			    for α₂ = -1:1, α₁ = -1:1
 			    	@test begin
 			    		res = b[α₁,α₂] ≈ phase * (-1)^(α₁+α₂) * conj(b[-α₁,-α₂])
@@ -463,13 +463,13 @@ end
 			    
 			    phase = (-1)^(j₁+j₂+l+m)
 			    
-			    b1 = BiPoSH(GSH(),n1,n2,l,m,j₁,j₂)
-			    b2 = BiPoSH(GSH(),n1,n2,l,-m,j₁,j₂)
+			    b1 = BiPoSH(GSH(),PB(),n1,n2,l,m,j₁,j₂)
+			    b2 = BiPoSH(GSH(),PB(),n1,n2,l,-m,j₁,j₂)
 
 			    for α₂ = -1:1, α₁ = -1:1
 			    	@test begin
 			    		res = isapprox(b1[α₁,α₂], phase * (-1)^(α₁+α₂) * conj(b2[-α₁,-α₂]), 
-			    			atol=1e-15, rtol= sqrt(eps(Float64)))
+			    			atol=1e-14, rtol= sqrt(eps(Float64)))
 			    		if !res
 			    			@show (l,m,j₁,j₂,α₁,α₂) b1[α₁,α₂] b2[-α₁,-α₂]
 			    		end
@@ -484,7 +484,7 @@ end
 	end
 end
 
-@testset "BiPoSH ℓrange" begin
+@testset "BiPoSH PB ℓrange" begin
 	n1 = Point2D(π/3,0)
 	n2 = Point2D(π/3,π/3)
 	SHModes = LM(0:5)
@@ -492,35 +492,85 @@ end
 	ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes)
 
 	@testset "OSH" begin
-	    B_all = BiPoSH(OSH(),n1,n2,SHModes,ℓ′ℓ)
+	    B_all = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
 
 	    for (ℓ′,ℓ) in ℓ′ℓ
-	    	B = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
+	    	B = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
 	    	@test B_all[(ℓ′,ℓ)] ≈ B
 	    end
 	end
 	@testset "GSH" begin
-	    B_all = BiPoSH(GSH(),n1,n2,SHModes,ℓ′ℓ)
+	    B_all = BiPoSH(GSH(),PB(),n1,n2,SHModes,ℓ′ℓ)
 
 	    for (ℓ′,ℓ) in ℓ′ℓ
-	    	B = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
+	    	B = BiPoSH(GSH(),PB(),n1,n2,SHModes,ℓ′,ℓ)
 	    	@test B_all[(ℓ′,ℓ)] ≈ B
 	    end
 	end
 end
 
-@testset "BiPoSH all (l,m) one (l₁,l₂)" begin
+@testset "BiPoSH PB all (l,m) one (l₁,l₂)" begin
 	n1 = Point2D(π/2,0);
 	n2 = Point2D(π/2,π/3);
     SHModes = LM(0:2)
     ℓ′,ℓ = 1,2
-    b = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
+    b = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
     for (s,t) in shmodes(b)
-    	@test b[(s,t)] ≈ BiPoSH(OSH(),n1,n2,s,t,ℓ′,ℓ)
+    	@test b[(s,t)] ≈ BiPoSH(OSH(),nothing,n1,n2,s,t,ℓ′,ℓ)
     end
 end
 
-@testset "BiPoSH ℓrange 2pt" begin
+@testset "BiPoSH Hansen one pair" begin
+
+	function testPBHansen(B_PB,B_H)
+		@test isapprox(B_H[0,0],B_PB[0,0],atol=1e-14,rtol=1e-10)
+	    @test isapprox(B_H[1,0],B_PB[1,0] + B_PB[-1,0],atol=1e-14,rtol=1e-10)
+	    @test isapprox(B_H[0,1],B_PB[0,-1] + B_PB[0,1],atol=1e-14,rtol=1e-10)
+	    @test isapprox(B_H[1,1],B_PB[-1,-1] + B_PB[1,-1] + 
+	    				B_PB[-1,1] + B_PB[1,1],atol=1e-14,rtol=1e-10)
+	end
+
+	@testset "real" begin
+	    n1 = Point2D(π/2,0);
+		n2 = Point2D(π/2,π/3);
+    	j₁,j₂,l,m = 2,3,1,1
+	    B_PB = BiPoSH(GSH(),PB(),n1,n2,l,m,j₁,j₂)
+	    B_H = BiPoSH(GSH(),Hansen(),n1,n2,l,m,j₁,j₂)
+
+	    testPBHansen(B_PB,B_H)
+	end
+	@testset "Equator" begin
+		n1 = Point2D(Equator(),0);
+		n2 = Point2D(Equator(),π/3);
+		j₁,j₂,l,m = 2,3,2,1
+		B_PB = BiPoSH(GSH(),PB(),n1,n2,l,m,j₁,j₂)
+	    B_H = BiPoSH(GSH(),Hansen(),n1,n2,l,m,j₁,j₂)
+
+	    testPBHansen(B_PB,B_H)
+
+	    n1 = Point2D(Equator(),0);
+		n2 = Point2D(Equator(),π/3);
+		j₁,j₂,l,m = 2,3,2,2
+		B_H = BiPoSH(GSH(),Hansen(),n1,n2,l,m,j₁,j₂)
+		@test all(iszero,B_H)
+	end
+	@testset "NorthPole" begin
+	    n1 = Point2D(NorthPole(),0);
+		n2 = Point2D(NorthPole(),0);
+		j₁,j₂,l,m = 2,3,2,1
+		B_PB = BiPoSH(GSH(),PB(),n1,n2,l,m,j₁,j₂)
+	    B_H = BiPoSH(GSH(),Hansen(),n1,n2,l,m,j₁,j₂)
+	    testPBHansen(B_PB,B_H)
+
+	    testPBHansen(B_PB,B_H)
+	    n1 = Point2D(0,0);
+		n2 = Point2D(0,0);
+		B_PB = BiPoSH(GSH(),PB(),n1,n2,l,m,j₁,j₂)
+		testPBHansen(B_PB,B_H)
+	end
+end
+
+@testset "BiPoSH ℓrange n1n2 n2n1" begin
 	
 	n1 = Point2D(π/2,0);
 	n2 = Point2D(π/2,π/3);
@@ -529,7 +579,7 @@ end
 		@test begin
 			res = false
 			try
-    			res = arr[ℓ′ℓind] ≈ match_arr
+    			res = isapprox(arr[ℓ′ℓind],match_arr,atol=1e-14,rtol=1e-10)
     		catch
     			@show ℓ ℓ′ axes(arr[ℓ′ℓind]) axes(match_arr)
     			rethrow()
@@ -552,15 +602,15 @@ end
 		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
 
 		@testset "all ℓ′" begin
-		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
-		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ_range)
+		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
+		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ_range)
 		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
 			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
 		    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-		    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
-		    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),n2,n1,SHModes,ℓ′,ℓ)
+		    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
+		    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),nothing,n2,n1,SHModes,ℓ′,ℓ)
 		    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
 		    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
 		    	test_and_print_fail(Yℓ′n₁ℓn₂_all_2,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
@@ -573,13 +623,13 @@ end
 		    ℓ′range = l₂_range(ℓ′ℓ)
 		    if length(ℓ′range) > 1
 			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
-			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
 			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
 
 			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-			    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),n1,n2,SHModes,ℓ′,ℓ)
-			    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),n2,n1,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),nothing,n2,n1,SHModes,ℓ′,ℓ)
 			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
 		    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
 			    end
@@ -587,7 +637,7 @@ end
 	    end
 	end
 
-	@testset "GSH" begin
+	@testset "GSH PB" begin
 		SHModes = LM(0,5);
 		ℓ_range = 0:5;
 		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
@@ -623,8 +673,8 @@ end
 	    end
 
 		@testset "all ℓ′" begin
-		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ′ℓ)
-		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ_range)
+		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),PB(),n1,n2,SHModes,ℓ′ℓ)
+		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(GSH(),PB(),n1,n2,SHModes,ℓ_range)
 		    
 		    @test Yℓ′n₁ℓn₂_all == Yℓ′n₁ℓn₂_all_2
 		    @test Yℓ′n₂ℓn₁_all == Yℓ′n₂ℓn₁_all_2
@@ -635,8 +685,8 @@ end
 			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
 			@testset "match with B(ℓ′,ℓ)" begin
 			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
-			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),PB(),n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),PB(),n2,n1,SHModes,ℓ′,ℓ)
 			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
 			    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
 			    end
@@ -647,7 +697,7 @@ end
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
 			@testset "compare with OSH" begin
-			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
 			    testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
 			    testOSH(Yℓ′n₂ℓn₁_all,Yℓ′n₂ℓn₁_all_OSH)
 			end
@@ -658,14 +708,14 @@ end
 		    ℓ′range = l₂_range(ℓ′ℓ)
 		    if length(ℓ′range) > 1
 			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
-			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),n1,n2,SHModes,ℓ′ℓ)
+			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),PB(),n1,n2,SHModes,ℓ′ℓ)
 			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
 			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
 
 			    @testset "match with B(ℓ′,ℓ)" begin
 				    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
-				    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),n1,n2,SHModes,ℓ′,ℓ)
-				    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),n2,n1,SHModes,ℓ′,ℓ)
+				    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),PB(),n1,n2,SHModes,ℓ′,ℓ)
+				    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),PB(),n2,n1,SHModes,ℓ′,ℓ)
 				    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
 			    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
 				    end
@@ -677,10 +727,89 @@ end
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
 			@testset "compare with OSH" begin
-			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),n1,n2,SHModes,ℓ′ℓ)
+			    Yℓ′n₁ℓn₂_all_OSH,Yℓ′n₂ℓn₁_all_OSH = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
 			    testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
 			    testOSH(Yℓ′n₂ℓn₁_all,Yℓ′n₂ℓn₁_all_OSH)
 			end
 	    end
 	end
+
+	@testset "GSH Hansen" begin
+		SHModes = LM(0,5);
+		ℓ_range = 0:5;
+		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		
+		function testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			# We test for Yʲ²ʲ¹ₗₘ_α₂α₁_n₂n₁ = (-1)^(j₁+j₂+l) * Yʲ¹ʲ²ₗₘ_α₁α₂_n₁n₂
+	    	for (ℓ′,ℓ) in Iterators.product(ℓ_common,ℓ_common)
+	    		Yℓ′n₁ℓn₂ = Yℓ′n₁ℓn₂_all[(ℓ′,ℓ)]
+	    		Yℓn₂ℓ′n₁ = Yℓ′n₂ℓn₁_all[(ℓ,ℓ′)]
+	    		for (s,t) in shmodes(Yℓ′n₁ℓn₂)
+	    			phase = (-1)^(ℓ′ + ℓ + s)
+	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[:,:,(s,t)]
+	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[:,:,(s,t)]
+    				@test begin
+    					res = isapprox(Yℓ′n₁ℓn₂_st,phase .* permutedims(Yℓn₂ℓ′n₁_st),
+    								atol=1e-14,rtol=1e-10)
+    					if !res
+    						@show (s,t) Yℓ′n₁ℓn₂_st Yℓn₂ℓ′n₁_st
+    					end
+    					res
+    				end
+	    		end
+	    	end
+	    end
+
+		@testset "all ℓ′" begin
+		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),Hansen(),n1,n2,SHModes,ℓ′ℓ)
+		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(GSH(),Hansen(),n1,n2,SHModes,ℓ_range)
+		    
+		    @test Yℓ′n₁ℓn₂_all == Yℓ′n₁ℓn₂_all_2
+		    @test Yℓ′n₂ℓn₁_all == Yℓ′n₂ℓn₁_all_2
+
+		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+			@testset "match with B(ℓ′,ℓ)" begin
+			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),Hansen(),n1,n2,SHModes,ℓ′,ℓ)
+			    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),Hansen(),n2,n1,SHModes,ℓ′,ℓ)
+			    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+			    	test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+			    end
+			end
+			@testset "match flip" begin
+				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ_common = intersect(ℓ′_range,ℓ_range)
+			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			end
+		end
+
+	    @testset "some ℓ′" begin
+		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		    ℓ′range = l₂_range(ℓ′ℓ)
+		    if length(ℓ′range) > 1
+			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),Hansen(),n1,n2,SHModes,ℓ′ℓ)
+			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
+			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+
+			    @testset "match with B(ℓ′,ℓ)" begin
+				    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
+				    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),Hansen(),n1,n2,SHModes,ℓ′,ℓ)
+				    	Yℓ′n₂ℓn₁ = BiPoSH(GSH(),Hansen(),n2,n1,SHModes,ℓ′,ℓ)
+				    	test_and_print_fail(Yℓ′n₁ℓn₂_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₁ℓn₂)
+			    		test_and_print_fail(Yℓ′n₂ℓn₁_all,(ℓ′ℓind,ℓ′,ℓ),Yℓ′n₂ℓn₁)
+				    end
+				end
+			end
+			@testset "match flip" begin
+				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ_common = intersect(ℓ′_range,ℓ_range)
+			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
+			end
+	    end
+	end
 end
+
