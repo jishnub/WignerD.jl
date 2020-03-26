@@ -1170,20 +1170,6 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Equator,Real},(θ�
 		end
 	end
 
-	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid
-		@inbounds for l in l_range(lm_modes_j₁j₂,0)
-			l_ind = modeindex(lm_modes,(l,0))
-			if isodd(j₁+j₂+l)
-				# in this case the term is purely imaginary
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
-			else
-				# in this case the term is purely real
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
-			end
-		end
-	end
-
 	@inbounds for m in m_symmetry
 		
 		lrange_m = l_range(lm_modes_j₁j₂,m)
@@ -1199,6 +1185,24 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Equator,Real},(θ�
 				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
 
 				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[β,γ,l₋mind])
+			end
+		end
+	end
+
+	# Specifically for m=0 all the components are either real or purely imaginary
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes,(l,0))
+			if isodd(j₁+j₂+l)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,1,l_ind]),0)
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,1,l_ind]))
+			else
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,1,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,0,l_ind]))
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,1,l_ind]),0)
 			end
 		end
 	end
@@ -1250,20 +1254,6 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,�
 		end
 	end
 
-	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid
-		@inbounds for l in l_range(lm_modes_j₁j₂,0)
-			l_ind = modeindex(lm_modes,(l,0))
-			if isodd(j₁+j₂+l)
-				# in this case the term is purely imaginary
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
-			else
-				# in this case the term is purely real
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
-			end
-		end
-	end
-
 	@inbounds for m in m_symmetry
 		
 		lrange_m = l_range(lm_modes_j₁j₂,m)
@@ -1279,6 +1269,24 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,�
 				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
 
 				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[β,γ,l₋mind])
+			end
+		end
+	end
+
+	# Specifically for m=0 all the components are either real or purely imaginary
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes,(l,0))
+			if isodd(j₁+j₂+l)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,1,l_ind]),0)
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,1,l_ind]))
+			else
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,1,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,0,l_ind]))
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,1,l_ind]),0)
 			end
 		end
 	end
@@ -1333,20 +1341,6 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Equator,Real},(θ�
 		end
 	end
 
-	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid && iseven(j₁+j₂)
-		@inbounds for l in l_range(lm_modes_j₁j₂,0)
-			l_ind = modeindex(lm_modes,(l,0))
-			if isodd(j₁+j₂+l)
-				# in this case the term is purely imaginary
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
-			else
-				# in this case the term is purely real
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
-			end
-		end
-	end
-
 	@inbounds for m in m_symmetry
 
 		isodd(j₁+j₂) && iseven(m) && continue
@@ -1364,6 +1358,24 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Equator,Real},(θ�
 				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
 
 				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[β,γ,l₋mind])
+			end
+		end
+	end
+
+	# Specifically for m=0 all the components are either real or purely imaginary
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes,(l,0))
+			if isodd(j₁+j₂+l)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,1,l_ind]),0)
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,1,l_ind]))
+			else
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,1,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,0,l_ind]))
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,1,l_ind]),0)
 			end
 		end
 	end
@@ -1414,20 +1426,6 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,�
 		end
 	end
 
-	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid
-		@inbounds for l in l_range(lm_modes_j₁j₂,0)
-			l_ind = modeindex(lm_modes,(l,0))
-			if isodd(j₁+j₂+l)
-				# in this case the term is purely imaginary
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
-			else
-				# in this case the term is purely real
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
-			end
-		end
-	end
-
 	@inbounds for m in m_symmetry
 		
 		lrange_m = l_range(lm_modes_j₁j₂,m)
@@ -1443,6 +1441,24 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,�
 				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
 
 				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[β,γ,l₋mind])
+			end
+		end
+	end
+
+	# Specifically for m=0 all the components are either real or purely imaginary
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes,(l,0))
+			if isodd(j₁+j₂+l)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,1,l_ind]),0)
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,1,l_ind]))
+			else
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,1,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,0,l_ind]))
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,1,l_ind]),0)
 			end
 		end
 	end
@@ -1495,20 +1511,6 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{NorthPole,Real},(θ
 		end
 	end
 
-	# Specifically for m=0 the (0,0) components are purely real or imaginary
-	if 0 in m_valid
-		@inbounds for l in l_range(lm_modes_j₁j₂,0)
-			l_ind = modeindex(lm_modes,(l,0))
-			if isodd(j₁+j₂+l)
-				# in this case the term is purely imaginary
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
-			else
-				# in this case the term is purely real
-				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
-			end
-		end
-	end
-
 	@inbounds for m in m_symmetry
 		
 		lrange_m = l_range(lm_modes_j₁j₂,m)
@@ -1524,6 +1526,24 @@ function BiPoSH_compute!(::GSH,::Hansen,(θ₁,ϕ₁)::Tuple{NorthPole,Real},(θ
 				# Yʲ¹ʲ²ₗ₋ₘ_βγ = (-1)^(j₁+j₂+l+m+β+γ) conj(Yʲ¹ʲ²ₗₘ_-β-γ)
 
 				Yj₁j₂n₁n₂[β,γ,l_ind] = (-1)^(j₁+j₂+l+m+β+γ) * conj(Yj₁j₂n₁n₂[β,γ,l₋mind])
+			end
+		end
+	end
+
+	# Specifically for m=0 all the components are either real or purely imaginary
+	if 0 in m_valid
+		@inbounds for l in l_range(lm_modes_j₁j₂,0)
+			l_ind = modeindex(lm_modes,(l,0))
+			if isodd(j₁+j₂+l)
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,0,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,1,l_ind]),0)
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,1,l_ind]))
+			else
+				Yj₁j₂n₁n₂[0,0,l_ind] = Complex(real(Yj₁j₂n₁n₂[0,0,l_ind]),0)
+				Yj₁j₂n₁n₂[0,1,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[0,1,l_ind]))
+				Yj₁j₂n₁n₂[1,0,l_ind] = Complex(0,imag(Yj₁j₂n₁n₂[1,0,l_ind]))
+				Yj₁j₂n₁n₂[1,1,l_ind] = Complex(real(Yj₁j₂n₁n₂[1,1,l_ind]),0)
 			end
 		end
 	end

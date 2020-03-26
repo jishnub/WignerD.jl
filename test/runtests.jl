@@ -570,6 +570,47 @@ end
 	end
 end
 
+@testset "BiPoSH Hansen m=0" begin
+	isimag(z) = iszero(real(z))
+	function testrealimag(n1,n2)
+		for j₁=1:3,j₂=1:3,l=abs(j₁-j₂):j₁+j₂
+	    	B = BiPoSH(GSH(),Hansen(),n1,n2,l,0,j₁,j₂)
+	    	if iseven(j₁+j₂+l)
+	    		@test isreal(B[0,0])
+	    		@test isimag(B[0,1])
+	    		@test isimag(B[1,0])
+	    		@test isreal(B[1,1])
+	    	else
+	    		@test isimag(B[0,0])
+	    		@test isreal(B[0,1])
+	    		@test isreal(B[1,0])
+	    		@test isimag(B[1,1])
+	    	end
+	    end
+	end
+	@testset "both Equator" begin
+		function test00(n1,n2)
+			for j=1:3
+				B = BiPoSH(GSH(),Hansen(),n1,n2,0,0,j,j)
+				@test begin 
+					res = B[0,1] ≈ conj(B[1,0])
+					if !res
+						@show j l B[0,1] B[1,0]
+					end
+					res
+				end
+			end
+		end
+	    n1,n2 = (Equator(),0),(Equator(),pi/3)
+	    testrealimag(n1,n2)
+	    test00(n1,n2)
+	end
+	@testset "both real" begin
+	    n1,n2 = (pi/2,0),(pi/2,pi/3)
+	    testrealimag(n1,n2)
+	end
+end
+
 @testset "BiPoSH ℓrange n1n2 n2n1" begin
 	
 	n1 = Point2D(π/2,0);
