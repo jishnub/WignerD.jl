@@ -599,6 +599,13 @@ end
 					end
 					res
 				end
+				@test begin 
+					res = B[0,1] ≈ -B[1,0]
+					if !res
+						@show j l B[0,1] B[1,0]
+					end
+					res
+				end
 			end
 		end
 	    n1,n2 = (Equator(),0),(Equator(),pi/3)
