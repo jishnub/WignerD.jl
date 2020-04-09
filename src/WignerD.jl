@@ -69,6 +69,10 @@ Base.Float64(::Equator) = π/2
 Base.AbstractFloat(p::Equator) = Float64(p)
 
 Base.one(::Type{Equator}) = one(Float64)
+Base.zero(::Type{Equator}) = zero(Float64)
+
+Base.promote_rule(::Type{Equator},::Type{Float64}) = Float64
+Base.promote_rule(::Type{Equator},T::Type{<:Real}) = promote_rule(Float64,T)
 
 #########################################################################
 # Dictionary to cache the eigenvectors and eigenvalues of Jy 
