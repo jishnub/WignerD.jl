@@ -71,88 +71,118 @@ end
 end
 
 @testset "d1_mn(θ)" begin
-	n = 100
-	for θ in LinRange(π/n,π-π/n,2n+1)
-		d1 = djmatrix(1,θ)
-		
-		@test isapprox(d1[1,1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[1,0],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[1,-1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+	function test(d,θ)
+		@test isapprox(d[1,1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,0],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,-1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d1[0,1],sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[0,0],cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[0,-1],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,1],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,0],cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,-1],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d1[-1,1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[-1,0],sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[-1,-1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,0],sin(θ)/√2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,-1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 	end
+	@testset "ClampedWignerdMatrix" begin
+		n = 100
+		
+		for θ in LinRange(π/n,π-π/n,2n+1)
+			d = ClampedWignerdMatrix(1,θ)
+			test(d,θ)
+		end
 
-	θ = Equator()
-	d1 = djmatrix(1,θ)
-	@testset "Equator" begin
-	    @test isapprox(d1[1,1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[1,0],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[1,-1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		θ = Equator()
+		d = ClampedWignerdMatrix(1,θ)
+		@testset "Equator" begin
+		   test(d,θ) 
+		end
+	end
+	@testset "WignerdMatrix" begin
+		n = 100
+		
+		for θ in LinRange(π/n,π-π/n,2n+1)
+			d = WignerdMatrix(1,θ)
+			test(d,θ)
+		end
 
-		@test isapprox(d1[0,1],sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[0,0],cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[0,-1],-sin(θ)/√2,atol=1e-14,rtol=1e-8)
-
-		@test isapprox(d1[-1,1],(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[-1,0],sin(θ)/√2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d1[-1,-1],(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		θ = Equator()
+		d = WignerdMatrix(1,θ)
+		@testset "Equator" begin
+		   test(d,θ) 
+		end
 	end
 end
 
 @testset "d2_mn(θ)" begin
-	n = 100
-	for θ in LinRange(π/n,π-π/n,2n+1)
-		d2 = djmatrix(2,θ)
+	function test(d::ClampedWignerdMatrix,θ)
+		@test isapprox(d[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
 		
-		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+
+		@test isapprox(d[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+	end
+	function test(d::WignerdMatrix,θ)
+		c = ClampedWignerdMatrix(d)
+		test(c,θ)
+
+		# Extra indices
+		@test isapprox(d[2,2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[2,-2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 		
-		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,2],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[1,-2],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		
+		@test isapprox(d[0,2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[0,-2],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,2],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-1,-2],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
 
-		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-
-		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-2,2],(1-cos(θ))^2/4,atol=1e-14,rtol=1e-8)
+		@test isapprox(d[-2,-2],(1+cos(θ))^2/4,atol=1e-14,rtol=1e-8)
 	end
 
-	@testset "Equator" begin
-		θ = Equator()
-		d2 = djmatrix(2,θ)
-		@test isapprox(d2[2,1],-sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[2,-1],-sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		
-		@test isapprox(d2[1,1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,0],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[1,-1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+	@testset "ClampedWignerdMatrix" begin
+		n = 100
+		for θ in LinRange(π/n,π-π/n,2n+1)
+			d = ClampedWignerdMatrix(2,θ)
+			test(d,θ)
+		end
 
-		@test isapprox(d2[0,1],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,0],1/2*(3cos(θ)^2-1),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[0,-1],-√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
+		@testset "Equator" begin
+			θ = Equator()
+			d = ClampedWignerdMatrix(2,θ)
+			test(d,θ)
+		end
+	end
 
-		@test isapprox(d2[-1,1],-(2cos(θ)^2-cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,0],√(3/2)*sin(θ)*cos(θ),atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-1,-1],(2cos(θ)^2+cos(θ)-1)/2,atol=1e-14,rtol=1e-8)
+	@testset "WignerdMatrix" begin
+	    n = 100
+		for θ in LinRange(π/n,π-π/n,2n+1)
+			d = WignerdMatrix(2,θ)
+			test(d,θ)
+		end
 
-		@test isapprox(d2[-2,1],sin(θ)*(1-cos(θ))/2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,0],1/2*√(3/2)*sin(θ)^2,atol=1e-14,rtol=1e-8)
-		@test isapprox(d2[-2,-1],sin(θ)*(1+cos(θ))/2,atol=1e-14,rtol=1e-8)
+		@testset "Equator" begin
+			θ = Equator()
+			d = WignerdMatrix(2,θ)
+			test(d,θ)
+		end
 	end
 end
 
