@@ -353,6 +353,33 @@ end
     end
 end
 
+@testset "Y rotation" begin
+    #= VSH rotate as Y_{ℓm′}^γ (n′) = ∑_m D^ℓ_{m,m′}(α,β,γ) Y_{ℓm}^γ (n)
+    Assume passive rotation by an angle β about the y axis
+    in the counter-clockwise sense. This implies α = γ = 0.
+    If R represents this passive rotation, we obtain n′ = R⁻¹ n
+    For points on the x-z plane lying on the unit sphere 
+    (equivalently lying on the prime-meridian), this would imply 
+    (θ′, ϕ′=0) = (θ - β, ϕ=0).
+    =#
+
+    α, β, γ = 0, π/10, 0
+    θ = π/4; θ′ = θ - β
+    n = Point2D(θ,0); n′ = Point2D(θ′,0)
+
+    for ℓ in 1:50
+
+	    Y = Ylmatrix(GSH(),ℓ,n)
+	    Y′ = Ylmatrix(GSH(),ℓ,n′)
+
+	    D = WignerDMatrix(ℓ,α,β,γ)
+
+	    for m′ in -ℓ:ℓ, γ in WignerD.vectorinds(ℓ)
+		    @test isapprox(Y′[m′,γ],sum(D[m,m′]*Y[m,γ] for m in -ℓ:ℓ),atol=1e-13,rtol=1e-8)
+		end
+	end
+end
+
 @testset "BiPoSH_OSH_10" begin
 	n1 = Point2D(π*rand(),2π*rand());
 	n2 = Point2D(π*rand(),2π*rand());
@@ -889,5 +916,38 @@ end
 			end
 	    end
 	end
+end
+
+@testset "BiPoSH rotation" begin
+    #= BiPoSh rotate as 
+    B_{ℓm′}^{j₁β,j₂γ} (n₁′,n₂′) = 
+    	∑_m D^ℓ_{m,m′}(α,β,γ) B_{ℓm}^^{j₁β,j₂γ} (n₁,n₂)
+    Assume passive rotation by an angle β about the y axis
+    in the counter-clockwise sense. This implies α = γ = 0.
+    If R represents this passive rotation, we obtain n′ = R⁻¹ n
+    For points on the x-z plane lying on the unit sphere 
+    (equivalently lying on the prime-meridian), this would imply 
+    (θ′, ϕ′=0) = (θ - β, ϕ=0).
+    =#
+
+    α, β, γ = 0, π/10, 0
+    θ₁ = π/4; θ₁′ = θ₁ - β
+    n₁ = Point2D(θ₁,0); n₁′ = Point2D(θ₁′,0)
+    θ₂ = π/3; θ₂′ = θ₂ - β
+    n₂ = Point2D(θ₂,0); n₂′ = Point2D(θ₂′,0)
+
+    @testset "PB" begin
+    	for j₁ = 1:10, j₂ = 1:10, ℓ = abs(j₁-j₂):j₁+j₂
+
+	    	B = BiPoSH(GSH(),PB(),n₁,n₂,LM(ℓ:ℓ),j₁,j₂)
+	    	B′ = BiPoSH(GSH(),PB(),n₁′,n₂′,LM(ℓ:ℓ),j₁,j₂)
+
+		    D = WignerDMatrix(ℓ,α,β,γ)
+
+		    for m′ in -ℓ:ℓ, γ in WignerD.vectorinds(j₂), β in WignerD.vectorinds(j₁)
+			    @test isapprox(B′[β,γ,(ℓ,m′)],sum(D[m,m′]*B[β,γ,(ℓ,m)] for m in -ℓ:ℓ),atol=1e-13,rtol=1e-8)
+			end
+		end
+    end
 end
 

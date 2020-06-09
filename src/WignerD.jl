@@ -92,23 +92,44 @@ struct OSHindices end
 
 vectorinds(j::Int) = iszero(j) ? Base.IdentityUnitRange(0:0) : Base.IdentityUnitRange(-1:1)
 
-abstract type WignerMatrices{T} <: AbstractArray{T,2} end
-abstract type WignerReducedMatrix <: WignerMatrices{Float64} end
+abstract type WignerMatrices{T<:Number} <: AbstractMatrix{T} end
+abstract type WignerReducedMatrix{T<:Real} <: WignerMatrices{T} end
 
-struct WignerdMatrix <: WignerReducedMatrix
+promote_type_phase(T::Type) = promote_type(T,Int)
+
+struct WignerdMatrix{T,V} <: WignerReducedMatrix{T}
 	j :: Int
-	data :: Vector{Float64}
-end
+	data :: V
 
-struct WignerDMatrix{A<:Real,G<:Real} <: WignerMatrices{ComplexF64}
+	function WignerdMatrix{T,V}(j::Integer,data::V) where {T<:Real,V<:AbstractArray{<:Real}}
+		if length(data) < nunique(WignerdMatrix,j)
+			throw(ArgumentError("array provided is not large enough"*
+			" to store all values. Need an array of "*
+			"length $(nunique(WignerdMatrix,j)) whereas the array provided "*
+			"has length = $(length(data))"))
+		end
+		new{T,V}(j,data)
+	end
+end
+nunique(::Type{<:WignerdMatrix}, j::Integer) = (j+1)^2
+
+struct WignerDMatrix{T<:Complex,A<:Real,D<:WignerdMatrix,G<:Real} <: WignerMatrices{T}
 	j :: Int
 	α :: A
+	data :: D
 	γ :: G
-	data :: WignerdMatrix
 end
 
-WignerDMatrix(j,α,γ) = WignerDMatrix(j,α,γ,WignerdMatrix(j))
-WignerdMatrix(j) = WignerdMatrix(j,zeros((j+1)^2))
+function WignerDMatrix(T::Type,j::Integer,α::A,data::D,γ::G) where {A,G,D<:WignerdMatrix}
+	WignerDMatrix{T,A,D,G}(j,α,data,γ)
+end
+
+function WignerDMatrix(j::Integer, α::A, data::WignerdMatrix{Td}, γ::G) where {A,G,Td}
+	TC = Complex{promote_type(A,G)}
+	T = promote_type_phase(promote_type(TC,Td))
+	WignerDMatrix(T, j, α, data, γ)
+end
+nunique(::Type{<:WignerDMatrix},j) = nunique(WignerdMatrix,j)
 
 function flatind(d::WignerdMatrix,m,n)
 	# This is m-major, so m increases faster than n
@@ -124,17 +145,17 @@ function flatind(d::WignerdMatrix,m,n)
 end
 
 function flatind_phase(d::WignerdMatrix,m,n)
-	phase = 1.0
+	phase = 1
 	# The left is stored
 	# We evaluate the other parts using the correct phases
 	if n > 0 && abs(m) <= n
 		# right
 		m,n = -m,-n
-		phase *= (-1)^(m-n)
+		phase = (-1)^(m-n)
 	elseif m < -abs(n)
 		# top
 		m,n = n,m
-		phase *= (-1)^(m-n)
+		phase = (-1)^(m-n)
 	elseif m > abs(n)
 		# bottom
 		m,n = -n,-m
@@ -143,8 +164,9 @@ function flatind_phase(d::WignerdMatrix,m,n)
 	ind,phase
 end
 
-@inline @Base.propagate_inbounds function Base.getindex(d::WignerDMatrix,m::Integer,n::Integer)
-	d.data[m,n]*cis(-m*d.α)*cis(-n*d.γ)
+@inline @Base.propagate_inbounds function Base.getindex(d::WignerDMatrix{T},m::Integer,n::Integer) where {T}
+	val = d.data[m,n]*cis(-m*d.α)*cis(-n*d.γ)
+	convert(T, val)
 end
 @inline Base.@propagate_inbounds function Base.setindex!(d::WignerDMatrix,val,m::Int,n::Int)
 	val /= cis(-m*d.α)*cis(-n*d.γ)
@@ -153,21 +175,52 @@ end
 
 # This struct stores only the values necessary to compute GeneralizedY
 # The range of n is curtailed
-struct ClampedWignerdMatrix <: WignerReducedMatrix
+struct ClampedWignerdMatrix{T,V<:AbstractArray{<:Real}} <: WignerReducedMatrix{T}
 	j :: Int
-	data :: Vector{Float64}
+	data :: V
+
+	function ClampedWignerdMatrix{T,V}(j::Integer,data::V) where {T<:Real,V<:AbstractArray{<:Real}}
+		if length(data) < nunique(ClampedWignerdMatrix,j)
+			throw(ArgumentError("array provided is not large enough"*
+			" to store all values. Need an array of "*
+			"length $(nunique(ClampedWignerdMatrix,j)) whereas the array provided "*
+			"has length = $(length(data))"))
+		end
+		new{T,V}(j,data)
+	end
+end
+nunique(::Type{<:ClampedWignerdMatrix},j) = 3j+1
+
+struct GeneralizedY{T<:Complex, V<:AbstractArray{<:Complex}} <: WignerMatrices{T}
+	j :: Int
+	data :: V
+
+	function GeneralizedY{T,V}(j::Integer,data::V) where {T<:Complex,V<:AbstractArray{<:Complex}}
+		if length(data) < nunique(GeneralizedY,j)
+			throw(ArgumentError("array provided is not large enough"*
+			" to store all values. Need an array of "*
+			"length $(nunique(GeneralizedY,j)) whereas the array provided "*
+			"has length = $(length(data))"))
+		end
+		new{T,V}(j,data)
+	end
+end
+nunique(::Type{<:GeneralizedY},j) = (j+1)*length(vectorinds(j))
+
+for T in [:WignerdMatrix,:ClampedWignerdMatrix,:GeneralizedY]
+	@eval function $T{Q}(::UndefInitializer, j::Integer) where {Q}
+		data = Vector{Q}(undef, nunique($T,j))
+		$T{Q,Vector{Q}}(j, data)
+	end
+	@eval function $T(j::Integer, data::AbstractArray{Q}) where {Q}
+		V = typeof(data)
+		T = promote_type_phase(Q)
+		$T{Q,V}(j, data)
+	end
 end
 
-struct GeneralizedY <: WignerMatrices{ComplexF64}
-	j :: Int
-	data :: Vector{ComplexF64}
-end
-
-ClampedWignerdMatrix(j::Integer) = ClampedWignerdMatrix(j,zeros(3j+1))
-GeneralizedY(j::Integer) = GeneralizedY(j,zeros(ComplexF64,(j+1)*length(vectorinds(j))))
-
-function ClampedWignerdMatrix(d::WignerdMatrix)
-	c = ClampedWignerdMatrix(d.j)
+function ClampedWignerdMatrix(d::WignerdMatrix{T}) where {T}
+	c = ClampedWignerdMatrix{T}(undef,d.j)
 	for n in axes(c,2), m in axes(c,1)
 		c[m,n] = d[m,n]
 	end
@@ -193,15 +246,15 @@ function flatind(d::GeneralizedY,m,n)
 end
 
 function flatind_phase(d::ClampedWignerdMatrix,m,n)
-	phase = 1.0
+	phase = 1
 	if m < 0
 		m,n = -m,-n
-		phase *= (-1)^(m-n)
+		phase = (-1)^(m-n)
 	elseif m == 0 && n == -1
 		m,n = 1,0
 	elseif m == 0 && n == 1
 		m,n = 1,0
-		phase *= (-1)^(m-n)
+		phase = (-1)^(m-n)
 	end
 	ind = flatind(d,m,n)
 	ind,phase
@@ -222,30 +275,32 @@ end
 	d.data[ind] * phase
 end
 
-@inline Base.@propagate_inbounds function Base.getindex(d::GeneralizedY,m::Int,n::Int)
+@inline Base.@propagate_inbounds function Base.getindex(d::GeneralizedY{T},m::Int,n::Int) where {T}
 	ind,phase = flatind_phase(d,m,n)
 	val = d.data[ind]
-	m >= 0 ? val : phase*conj(val)
+	convert(T, m >= 0 ? val : phase*conj(val) )
 end
 
-@inline Base.@propagate_inbounds Base.getindex(d::WignerMatrices,ind::Int) = d.data[ind]
+@inline Base.@propagate_inbounds function Base.getindex(d::WignerMatrices{T}, ind::Int) where {T}
+	convert(T, d.data[ind])
+end
 
 @inline Base.@propagate_inbounds function Base.setindex!(d::WignerMatrices,val,m::Int,n::Int)
-	ind,phase = flatind_phase(d,m,n)
+	ind, phase = flatind_phase(d,m,n)
 	d.data[ind] = phase * val
 end
 @inline Base.@propagate_inbounds Base.setindex!(d::WignerMatrices,val,ind::Int) = (d.data[ind] = val)
 
 Base.axes(d::WignerMatrices) = (-d.j:d.j,-d.j:d.j)
-Base.axes(d::WignerMatrices,dim::Int) = axes(d)[dim]
+Base.axes(d::WignerMatrices, dim::Integer) = axes(d)[dim]
 
 Base.axes(d::Union{ClampedWignerdMatrix,GeneralizedY}) = (-d.j:d.j,vectorinds(d.j))
 
 Base.size(d::WignerMatrices) = map(length,axes(d))
-Base.size(d::WignerMatrices,dim::Int) = length(axes(d,dim))
+Base.size(d::WignerMatrices, dim::Integer) = length(axes(d,dim))
 
 function Base.collect(d::WignerMatrices{T}) where {T}
-	dfull = zeros(T,axes(d)...)
+	dfull = zeros(T,axes(d))
 	for n in axes(dfull,2), m in axes(dfull,1)
 		dfull[m,n] = d[m,n]
 	end
@@ -312,7 +367,7 @@ end
 function djmatrix_terms(θ::Real,λ,v,m::Integer,n::Integer,j=div(length(λ)-1,2))
 	dj_m_n = zero(ComplexF64)
 
-	@inbounds for μ in axes(λ,1)
+	for μ in axes(λ,1)
 		temp  = v[μ,m] * conj(v[μ,n])
 
 		dj_m_n += cis(-λ[μ]*θ) * temp
@@ -333,7 +388,7 @@ function djmatrix_terms(θ::Equator,λ,v,m::Integer,n::Integer,j=div(length(λ)-
 	dj_m_n = zero(ComplexF64)
 
 	if !(isodd(j+m) && n == 0) && !(isodd(j+n) && m == 0)
-		@inbounds for μ in axes(λ,1)
+		for μ in axes(λ,1)
 			temp  = v[μ,m] * conj(v[μ,n])
 
 			dj_m_n += cis(-λ[μ],θ) * temp
@@ -391,26 +446,29 @@ end
 
 djmatrix!(dj,j,x::SphericalPoint,args...) = djmatrix!(dj,j,x.θ,args...)
 
-function ClampedWignerdMatrix(j::Integer, β::Real)
-	dj = ClampedWignerdMatrix(j)
+function ClampedWignerdMatrix(T::Type, j::Integer, β::Real)
+	dj = ClampedWignerdMatrix{T}(undef, j)
 	A = zeros(ComplexF64,2j+1,2j+1)
 	djmatrix!(dj,j,β,A)
 end
+ClampedWignerdMatrix(j::Integer, β::Real) = ClampedWignerdMatrix(Float64, j, β)
 
-function WignerdMatrix(j::Integer, β::Real)
-	dj = WignerdMatrix(j)
+function WignerdMatrix(T::Type, j::Integer, β::Real)
+	dj = WignerdMatrix{T}(undef, j)
 	A = zeros(ComplexF64,2j+1,2j+1)
 	djmatrix!(dj,j,β,A)
 end
+WignerdMatrix(j::Integer, β::Real) = WignerdMatrix(Float64, j, β)
 
-function WignerDMatrix(j::Integer, α::Real, β::Real, γ::Real)
-	dj = WignerDMatrix(j,α,γ)
-	A = zeros(ComplexF64,2j+1,2j+1)
-	djmatrix!(dj.data,j,β,A)
-	dj
+function WignerDMatrix(::Type{Complex{R}}, j::Integer, α::Real, β::Real, γ::Real) where {R<:Real}
+	d = WignerdMatrix(R, j, β)
+	WignerDMatrix(Complex{R}, j, α, d, γ)
 end
+WignerDMatrix(j::Integer, α::Real, β::Real, γ::Real) = WignerDMatrix(ComplexF64, j, α, β, γ)
 
-(::Type{T})(j, x::SphericalPoint) where {T<:WignerReducedMatrix} = T(j,x.θ)
+for T in [:ClampedWignerdMatrix,:GeneralizedY]
+	@eval $T(j::Integer, x::SphericalPoint) = $T(j,x.θ)
+end
 
 ##########################################################################
 # Generalized spherical harmonics
@@ -455,7 +513,7 @@ end
 
 function Ylmatrix(::GSH,j::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
 	dj_θ = ClampedWignerdMatrix(j,θ)
-	Y = GeneralizedY(j)
+	Y = GeneralizedY{ComplexF64}(undef,j)
 	Ylmatrix!(GSH(),Y,dj_θ,j,(θ,ϕ);compute_d_matrix=false)
 end
 
@@ -501,7 +559,6 @@ end
 
 function Ylmatrix!(::OSH,YSH::AbstractVector{<:Complex},
 	l::Integer,(θ,ϕ)::Tuple{Real,Real},
-	
 	Plm_cosθ::AbstractVector{<:Real},Pcoeff;kwargs...)
 
 	m_range = get_m_n_ranges(l,OSHindices();kwargs...) |> first
@@ -552,10 +609,10 @@ function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
 	return YSH_n₁,YSH_n₂,P,coeff
 end
 function allocate_Y₁Y₂(::GSH,j₁,j₂)
-	Yj₁n₁ = GeneralizedY(j₁)
-	Yj₂n₂ = GeneralizedY(j₂)
-	dj₁n₁ = ClampedWignerdMatrix(j₁)
-	dj₂n₂ = ClampedWignerdMatrix(j₂)
+	Yj₁n₁ = GeneralizedY{ComplexF64}(undef,j₁)
+	Yj₂n₂ = GeneralizedY{ComplexF64}(undef,j₂)
+	dj₁n₁ = ClampedWignerdMatrix{Float64}(undef,j₁)
+	dj₂n₂ = ClampedWignerdMatrix{Float64}(undef,j₂)
 	A = zeros(ComplexF64,2max(j₁,j₂)+1,2max(j₁,j₂)+1)
 	return Yj₁n₁,Yj₂n₂,dj₁n₁,dj₂n₂,A
 end
