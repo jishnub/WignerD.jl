@@ -1,7 +1,6 @@
 module WignerD
 
 using Compat
-using Reexport
 using OffsetArrays
 using LinearAlgebra
 using Libdl
