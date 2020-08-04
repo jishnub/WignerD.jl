@@ -1,5 +1,8 @@
 using WignerD,PointsOnASphere,TwoPointFunctions,LegendrePolynomials,
-OffsetArrays,SphericalHarmonics,SphericalHarmonicArrays,Test
+OffsetArrays,SphericalHarmonics,SphericalHarmonicModes,
+SphericalHarmonicArrays,Test
+
+import SphericalHarmonicArrays: shmodes
 
 @testset "trigonometric functions for special points" begin
 	@testset "Equator" begin
@@ -399,7 +402,7 @@ end
 	WignerD.compute_YP!(lmax,(n1.θ,n1.ϕ),YSH1,P,coeff);
 	WignerD.compute_YP!(lmax,(n2.θ,n2.ϕ),YSH2,P,coeff);
 
-	B = SHVector(LM(1:1,0:0));
+	B = SHVector{ComplexF64}(LM(1:1,0:0));
 
 	for ℓ in axes(Yℓℓ_10,1)
 		
@@ -546,7 +549,7 @@ end
 	n2 = Point2D(π/3,π/3)
 	SHModes = LM(0:5)
 	ℓ_range = 1:10
-	ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes)
+	ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes)
 
 	@testset "OSH" begin
 	    B_all = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
@@ -572,7 +575,7 @@ end
     SHModes = LM(0:2)
     ℓ′,ℓ = 1,2
     b = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
-    for (s,t) in shmodes(b)
+    for (s,t) in first(shmodes(b))
     	@test b[(s,t)] ≈ BiPoSH(OSH(),nothing,n1,n2,s,t,ℓ′,ℓ)
     end
 end
@@ -702,17 +705,17 @@ end
 	end
 
 	@testset "OSH" begin
-		SHModes = LM(0,5);
 		ℓ_range = 0:5;
-		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		SHModes = LM(ℓ_range);
+		ℓ′ℓ = L2L1Triangle(ℓ_range, SHModes);
 
 		@testset "all ℓ′" begin
 		    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
 		    Yℓ′n₁ℓn₂_all_2,Yℓ′n₂ℓn₁_all_2 = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ_range)
-		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+		    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
 		    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
 		    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
 		    	Yℓ′n₂ℓn₁ = BiPoSH(OSH(),nothing,n2,n1,SHModes,ℓ′,ℓ)
@@ -724,13 +727,13 @@ end
 		end
 
 	    @testset "some ℓ′" begin
-		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
-		    ℓ′range = l₂_range(ℓ′ℓ)
+		    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes);
+		    ℓ′range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 		    if length(ℓ′range) > 1
-			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes,ℓ′range[2:end]);
 			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(OSH(),nothing,n1,n2,SHModes,ℓ′ℓ)
-			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₂ℓn₁_all)) == ℓ′ℓ
 
 			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
 			    	Yℓ′n₁ℓn₂ = BiPoSH(OSH(),nothing,n1,n2,SHModes,ℓ′,ℓ)
@@ -743,16 +746,16 @@ end
 	end
 
 	@testset "GSH PB" begin
-		SHModes = LM(0,5);
 		ℓ_range = 0:5;
-		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		SHModes = LM(ℓ_range);
+		ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes);
 		
 		function testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			# We test for Yʲ²ʲ¹ₗₘ_α₂α₁_n₂n₁ = (-1)^(j₁+j₂+l) * Yʲ¹ʲ²ₗₘ_α₁α₂_n₁n₂
 	    	for (ℓ′,ℓ) in Iterators.product(ℓ_common,ℓ_common)
 	    		Yℓ′n₁ℓn₂ = Yℓ′n₁ℓn₂_all[(ℓ′,ℓ)]
 	    		Yℓn₂ℓ′n₁ = Yℓ′n₂ℓn₁_all[(ℓ,ℓ′)]
-	    		for (s,t) in shmodes(Yℓ′n₁ℓn₂)
+	    		for (s,t) in first(shmodes(Yℓ′n₁ℓn₂))
 	    			phase = (-1)^(ℓ′ + ℓ + s)
 	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[:,:,(s,t)]
 	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[:,:,(s,t)]
@@ -768,11 +771,11 @@ end
 	    end
 
 	    function testOSH(Yℓ′n₁ℓn₂_all,Yℓ′n₁ℓn₂_all_OSH)
-	    	@test shmodes(Yℓ′n₁ℓn₂_all) == shmodes(Yℓ′n₁ℓn₂_all_OSH)
+	    	@test first(shmodes(Yℓ′n₁ℓn₂_all)) == first(shmodes(Yℓ′n₁ℓn₂_all_OSH))
 	    	for j₂j₁ind in axes(Yℓ′n₁ℓn₂_all,1)
 	    		YGSH = Yℓ′n₁ℓn₂_all[j₂j₁ind]
 	    		YOSH = Yℓ′n₁ℓn₂_all_OSH[j₂j₁ind]
-	    		@test shmodes(YGSH) == shmodes(YOSH)
+	    		@test first(shmodes(YGSH)) == first(shmodes(YOSH))
 	    		@test YGSH[0,0,:] ≈ YOSH
 	    	end
 	    end
@@ -784,10 +787,10 @@ end
 		    @test Yℓ′n₁ℓn₂_all == Yℓ′n₁ℓn₂_all_2
 		    @test Yℓ′n₂ℓn₁_all == Yℓ′n₂ℓn₁_all_2
 
-		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+		    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
 			@testset "match with B(ℓ′,ℓ)" begin
 			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
 			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),PB(),n1,n2,SHModes,ℓ′,ℓ)
@@ -797,7 +800,7 @@ end
 			    end
 			end
 			@testset "match flip" begin
-				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ′_range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 				ℓ_common = intersect(ℓ′_range,ℓ_range)
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
@@ -809,13 +812,13 @@ end
 		end
 
 	    @testset "some ℓ′" begin
-		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
-		    ℓ′range = l₂_range(ℓ′ℓ)
+		    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes);
+		    ℓ′range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 		    if length(ℓ′range) > 1
-			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes,ℓ′range[2:end]);
 			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),PB(),n1,n2,SHModes,ℓ′ℓ)
-			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₂ℓn₁_all)) == ℓ′ℓ
 
 			    @testset "match with B(ℓ′,ℓ)" begin
 				    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
@@ -827,7 +830,7 @@ end
 				end
 			end
 			@testset "match flip" begin
-				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ′_range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 				ℓ_common = intersect(ℓ′_range,ℓ_range)
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
@@ -840,16 +843,16 @@ end
 	end
 
 	@testset "GSH Hansen" begin
-		SHModes = LM(0,5);
 		ℓ_range = 0:5;
-		ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
+		SHModes = LM(ℓ_range);
+		ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes);
 		
 		function testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			# We test for Yʲ²ʲ¹ₗₘ_α₂α₁_n₂n₁ = (-1)^(j₁+j₂+l) * Yʲ¹ʲ²ₗₘ_α₁α₂_n₁n₂
 	    	for (ℓ′,ℓ) in Iterators.product(ℓ_common,ℓ_common)
 	    		Yℓ′n₁ℓn₂ = Yℓ′n₁ℓn₂_all[(ℓ′,ℓ)]
 	    		Yℓn₂ℓ′n₁ = Yℓ′n₂ℓn₁_all[(ℓ,ℓ′)]
-	    		for (s,t) in shmodes(Yℓ′n₁ℓn₂)
+	    		for (s,t) in first(shmodes(Yℓ′n₁ℓn₂))
 	    			phase = (-1)^(ℓ′ + ℓ + s)
 	    			Yℓ′n₁ℓn₂_st = Yℓ′n₁ℓn₂[:,:,(s,t)]
 	    			Yℓn₂ℓ′n₁_st = Yℓn₂ℓ′n₁[:,:,(s,t)]
@@ -872,10 +875,10 @@ end
 		    @test Yℓ′n₁ℓn₂_all == Yℓ′n₁ℓn₂_all_2
 		    @test Yℓ′n₂ℓn₁_all == Yℓ′n₂ℓn₁_all_2
 
-		    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
-			@test shmodes(Yℓ′n₂ℓn₁_all_2) == ℓ′ℓ
+		    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
+			@test first(shmodes(Yℓ′n₂ℓn₁_all_2)) == ℓ′ℓ
 			@testset "match with B(ℓ′,ℓ)" begin
 			    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
 			    	Yℓ′n₁ℓn₂ = BiPoSH(GSH(),Hansen(),n1,n2,SHModes,ℓ′,ℓ)
@@ -885,20 +888,20 @@ end
 			    end
 			end
 			@testset "match flip" begin
-				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ′_range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 				ℓ_common = intersect(ℓ′_range,ℓ_range)
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
 		end
 
 	    @testset "some ℓ′" begin
-		    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes);
-		    ℓ′range = l₂_range(ℓ′ℓ)
+		    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes);
+		    ℓ′range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 		    if length(ℓ′range) > 1
-			    ℓ′ℓ = L₂L₁Δ(ℓ_range,SHModes,ℓ′range[2:end]);
+			    ℓ′ℓ = L2L1Triangle(ℓ_range,SHModes,ℓ′range[2:end]);
 			    Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all = BiPoSH_n1n2_n2n1(GSH(),Hansen(),n1,n2,SHModes,ℓ′ℓ)
-			    @test shmodes(Yℓ′n₁ℓn₂_all) == ℓ′ℓ
-			    @test shmodes(Yℓ′n₂ℓn₁_all) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₁ℓn₂_all)) == ℓ′ℓ
+			    @test first(shmodes(Yℓ′n₂ℓn₁_all)) == ℓ′ℓ
 
 			    @testset "match with B(ℓ′,ℓ)" begin
 				    for (ℓ′ℓind,(ℓ′,ℓ)) in enumerate(ℓ′ℓ)
@@ -910,7 +913,7 @@ end
 				end
 			end
 			@testset "match flip" begin
-				ℓ′_range = l₂_range(ℓ′ℓ)
+				ℓ′_range = SphericalHarmonicModes.l2_range(ℓ′ℓ)
 				ℓ_common = intersect(ℓ′_range,ℓ_range)
 			    testflip(Yℓ′n₁ℓn₂_all,Yℓ′n₂ℓn₁_all,ℓ_common)
 			end
