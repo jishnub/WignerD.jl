@@ -4,6 +4,11 @@ SphericalHarmonicArrays,Test
 
 import SphericalHarmonicArrays: shmodes
 
+import PointsOnASphere: SphericalPoint
+
+TwoPointFunctions.cosχ(n1::SphericalPoint, n2::SphericalPoint) = cosχ((n1.θ, n1.ϕ), (n2.θ, n2.ϕ))
+TwoPointFunctions.∂ϕ₂cosχ(n1::SphericalPoint, n2::SphericalPoint) = ∂ϕ₂cosχ((n1.θ, n1.ϕ), (n2.θ, n2.ϕ))
+
 @testset "trigonometric functions for special points" begin
 	@testset "Equator" begin
 		@test one(Equator()) == 1
