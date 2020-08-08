@@ -3,6 +3,7 @@ OffsetArrays,SphericalHarmonics,SphericalHarmonicModes,
 SphericalHarmonicArrays,Test
 
 import SphericalHarmonicArrays: shmodes
+import SphericalHarmonics: NorthPole, SouthPole
 
 import PointsOnASphere: SphericalPoint
 

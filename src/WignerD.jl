@@ -10,7 +10,7 @@ using SphericalHarmonics
 using SphericalHarmonicArrays
 using WignerSymbols
 using SphericalHarmonicModes
-import SphericalHarmonics: Pole
+import SphericalHarmonics: Pole, NorthPole, SouthPole
 
 import SphericalHarmonicModes: ModeRange, SHModeRange
 import SphericalHarmonicArrays: shmodes
@@ -484,39 +484,24 @@ to_unitrange(a::Integer) = Base.IdentityUnitRange(a:a)
 to_unitrange(a::AbstractUnitRange{<:Integer}) = Base.IdentityUnitRange(a)
 
 function allocate_YP(::OSH,lmax::Integer)
-	YSH = SphericalHarmonics.allocate_y(lmax)
+	YSH = SphericalHarmonics.allocate_y(ComplexF64, lmax)
 	coeff = SphericalHarmonics.compute_coefficients(lmax)
-	P = SphericalHarmonics.allocate_p(lmax)
+	P = SphericalHarmonics.allocate_p(Float64, lmax)
 	return YSH,P,coeff
 end
-function compute_YP!(lmax,(θ,ϕ)::Tuple{Real,Real},Y,P,coeff,
-	compute_Pl::Bool=true,compute_Y::Bool=true)
 
-	x = cos(θ)
-	compute_Pl && compute_p!(lmax,x,coeff,P)
-	compute_Y && compute_y!(lmax,x,ϕ,P,Y)
-end
-function compute_YP!(lmax,(x,ϕ)::Tuple{Pole,Real},Y,P,coeff,
-	compute_Pl::Bool=true,compute_Y::Bool=true)
-
-	compute_Pl && compute_p!(lmax,x,coeff,P)
-	compute_Y && compute_y!(lmax,x,ϕ,P,Y)
+function compute_YP!(lmax, (θ,ϕ), Y, P, coeff, compute_Pl::Bool=true, compute_Y::Bool=true)
+	compute_Pl && computePlmcostheta!(P,θ,lmax,coeff)
+	compute_Y && computeYlm!(Y,P,θ,ϕ,lmax)
 end
 
-function compute_YP!(lmax,(x,ϕ)::Tuple{Equator,Real},Y,P,coeff,
-	compute_Pl::Bool=true,compute_Y::Bool=true)
-
-	compute_Pl && compute_p!(lmax,0,coeff,P)
-	compute_Y && compute_y!(lmax,ϕ,P,Y)
-end
-
-function Ylmatrix(::GSH,j::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
+function Ylmatrix(::GSH, j::Integer, (θ,ϕ)::Tuple{Real,Real};kwargs...)
 	dj_θ = ClampedWignerdMatrix(j,θ)
 	Y = GeneralizedY{ComplexF64}(undef,j)
 	Ylmatrix!(GSH(),Y,dj_θ,j,(θ,ϕ);compute_d_matrix=false)
 end
 
-function Ylmatrix(::OSH,l::Integer,(θ,ϕ)::Tuple{Real,Real};kwargs...)
+function Ylmatrix(::OSH, l::Integer, (θ,ϕ)::Tuple{Real,Real};kwargs...)
 	YSH,P,coeff = allocate_YP(OSH(),l)
 	Ylmatrix!(OSH(),YSH,l,(θ,ϕ),P,coeff;kwargs...)
 end
@@ -566,7 +551,7 @@ function Ylmatrix!(::OSH,YSH::AbstractVector{<:Complex},
 	compute_Ylm = get(kwargs,:compute_Ylm,true)
 	compute_YP!(l,(θ,ϕ),YSH,Plm_cosθ,Pcoeff,compute_Pl,compute_Ylm)
 
-	OffsetVector(YSH[index_y(l,m_range)],m_range)
+	OffsetVector(YSH[SphericalHarmonics.index_y(l,m_range)],m_range)
 end
 
 Ylmatrix(T::AbstractSH,l::Integer,x::SphericalPoint;kwargs...) = Ylmatrix(T,l,(x.θ,x.ϕ);kwargs...)
@@ -601,10 +586,10 @@ function allocate_Y₁Y₂(::OSH,j₂j₁_lmax::L2L1Triangle;kwargs...)
 	allocate_Y₁Y₂(OSH(),ll′max;kwargs...)
 end
 function allocate_Y₁Y₂(::OSH,lmax::Integer;kwargs...)
-	YSH_n₁ = SphericalHarmonics.allocate_y(lmax)
-	YSH_n₂ = SphericalHarmonics.allocate_y(lmax)
+	YSH_n₁ = SphericalHarmonics.allocate_y(ComplexF64, lmax)
+	YSH_n₂ = SphericalHarmonics.allocate_y(ComplexF64, lmax)
 	coeff = SphericalHarmonics.compute_coefficients(lmax)
-	P = SphericalHarmonics.allocate_p(lmax)
+	P = SphericalHarmonics.allocate_p(Float64, lmax)
 	return YSH_n₁,YSH_n₂,P,coeff
 end
 function allocate_Y₁Y₂(::GSH,j₁,j₂)
@@ -774,8 +759,8 @@ function BiPoSH!(::OSH,::Any,(θ₁,ϕ₁)::Tuple{Real,Real},(θ₂,ϕ₂)::Tupl
 			Libdl.dlsym(lib,:wigner3j_wrapper)
 		end
 
-		Yℓ₁n₁ = OffsetVector(@view(YSH_n₁[index_y(ℓ₁)]),-ℓ₁:ℓ₁)
-		Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[index_y(ℓ₂)]),-ℓ₂:ℓ₂)
+		Yℓ₁n₁ = OffsetVector(@view(YSH_n₁[SphericalHarmonics.index_y(ℓ₁)]),-ℓ₁:ℓ₁)
+		Yℓ₂n₂ = OffsetVector(@view(YSH_n₂[SphericalHarmonics.index_y(ℓ₂)]),-ℓ₂:ℓ₂)
 		
 		BiPoSH_compute!(OSH(),(θ₁,ϕ₁),(θ₂,ϕ₂),B,SHModes,ℓ₁,ℓ₂,
 			Yℓ₁n₁,Yℓ₂n₂,wig3j_fn_ptr,w3j,CG)
