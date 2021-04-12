@@ -18,27 +18,21 @@ end
             @test cis(α*Equator()) == cis(α*π/2)
 	    end
     	@test @inferred cos(Equator()) == 0
-        @test @inferred sec(Equator()) == Inf
     	@test @inferred sin(Equator()) == 1
-    	@test @inferred csc(Equator()) == 1
     	@test @inferred float(Equator()) == π/2
     	@test @inferred AbstractFloat(Equator()) == π/2
     	@test @inferred Float64(Equator()) == π/2
 	end
     @testset "NorthPole" begin
         @test @inferred cos(NorthPole()) == 1
-        @test @inferred sec(NorthPole()) == 1
         @test @inferred sin(NorthPole()) == 0
-        @test @inferred csc(NorthPole()) == Inf
         @test @inferred float(NorthPole()) == 0
         @test @inferred AbstractFloat(NorthPole()) == 0
         @test @inferred Float64(NorthPole()) == 0
     end
     @testset "SouthPole" begin
         @test @inferred cos(SouthPole()) == -1
-        @test @inferred sec(SouthPole()) == -1
         @test @inferred sin(SouthPole()) == 0
-        @test @inferred csc(SouthPole()) == Inf
         @test @inferred float(SouthPole()) == float(pi)
         @test @inferred AbstractFloat(SouthPole()) == float(pi)
         @test @inferred Float64(SouthPole()) == float(pi)

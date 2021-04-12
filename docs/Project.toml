@@ -1,3 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 WignerD = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
+
+[compat]
+Documenter = "0.26"
