@@ -2,3 +2,6 @@
 *.nb
 *.so
 deps/build.log
+Manifest.toml
+docs/build
+docs/Manifest.toml
