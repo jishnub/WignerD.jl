@@ -179,6 +179,11 @@ function Jy_eigen(j)
     Jy_eigen(j, Jy)
 end
 
+"""
+    wignerdjmn(j, m, n, θ::Real)
+
+Evaluate the Wigner d-matrix element ``d^j_{m,n}(θ)``.
+"""
 wignerdjmn(j, m, n, θ::Real) = wignerdjmn(j, m, n, θ, Jy_eigen(j)...)
 Base.@propagate_inbounds function wignerdjmn(j, m, n, θ::Real, λ, v)
     dj_m_n = zero(ComplexF64)
@@ -262,38 +267,38 @@ Base.@propagate_inbounds function wignerd!(dj, j, θ, λ, v)
 end
 
 """
-    wignerd!(dj, j, θ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
+    wignerd!(d, j, θ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the wigner d-matrix ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``,
-and store the result in ``dj``.
+Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``,
+and store the result in `d`.
 The momentum ``j`` may be an integer or a half-integer, and must be non-negative.
 Optionally the pre-allocated matrix `Jy` may be provided,
 which must be a `ComplexF64` matrix of size `(2j+1, 2j+1)`, and may be overwritten during the calculation.
 """
-Base.@propagate_inbounds function wignerd!(dj, j, θ::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
+Base.@propagate_inbounds function wignerd!(d, j, θ::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
     λ, v = Jy_eigen(j, Jy)
-    wignerd!(dj, j, θ, λ, v)
-    return dj
+    wignerd!(d, j, θ, λ, v)
+    return d
 end
 
 """
     wignerd(j, θ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the wigner d-matrix ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``.
+Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``.
 The momentum ``j`` may be an
 integer or a half-integer, and must be non-negative. Optionally the pre-allocated matrix `Jy` may be provided,
 which must be a `ComplexF64` matrix of size `(2j+1, 2j+1)`, and may be overwritten during the calculation.
 """
 function wignerd(j, θ::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
-    dj = zeros(_matrixsize(j))
-    @inbounds wignerd!(dj, j, θ, Jy)
-    return dj
+    d = zeros(_matrixsize(j))
+    @inbounds wignerd!(d, j, θ, Jy)
+    return d
 end
 
 """
     wignerD!(D, j, α::Real, β::Real, γ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the wigner D-matrix elements ``D^j_{m,n}(α,β,γ)`` for the angular momentum ``j`` and the
+Evaluate the Wigner D-matrix with elements ``D^j_{m,n}(α,β,γ)`` for the angular momentum ``j`` and the
 Euler angles ``α``, ``β`` and ``γ``, and store the result in `D`.
 The momentum ``j`` may be an integer or a half-integer, and must be non-negative.
 Optionally the pre-allocated matrix `Jy` may be provided,
@@ -311,7 +316,7 @@ end
 """
     wignerD(j, α::Real, β::Real, γ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the wigner D-matrix elements ``D^j_{m,n}(α,β,γ)`` for the angular momentum ``j`` and the
+Evaluate the Wigner D-matrix with elements ``D^j_{m,n}(α,β,γ)`` for the angular momentum ``j`` and the
 Euler angles ``α``, ``β`` and ``γ``.
 The momentum ``j`` may be an integer or a half-integer, and must be non-negative.
 Optionally the pre-allocated matrix `Jy` may be provided,
