@@ -81,6 +81,19 @@ end
     for j in half(1):1:half(7)
         test_special(j)
     end
+
+    @testset "wignerDjmn" begin
+        for j in 0:3, β in LinRange(0, pi, 10), m in -j:j, n in -j:j
+            Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
+            djmn = WignerD.wignerdjmn(j, m, n, β)
+            @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+        end
+        for j in half(1):1:half(7), β in LinRange(0, pi, 10), m in -j:j, n in -j:j
+            Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
+            djmn = WignerD.wignerdjmn(j, m, n, β)
+            @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+        end
+    end
 end
 
 function testwignerd(testelements, j, θ)
@@ -88,6 +101,7 @@ function testwignerd(testelements, j, θ)
     testelements(WignerD._offsetmatrix(j, d), θ)
     @test wignerd(HalfInt(j), θ) == d
     @test isapprox(tr(d), sum(cos(m*θ) for m in -j:j), atol = 1e-14, rtol = sqrt(eps(Float64)))
+    @test det(d) ≈ 1
 end
 
 @testset "d0_mn(θ)" begin
@@ -306,6 +320,19 @@ end
         d = wignerd(j, β)
         D = wignerD(j, 0, β, 0)
         @test d == D
+        for α in LinRange(0, 2pi, 10), γ in LinRange(0, 2pi, 10)
+            D = wignerD(j, α, β, γ)
+            D_w = WignerD._offsetmatrix(j, D)
+            for n in -j:j, m in -j:j
+                @test isapprox(D_w[m, n], WignerD.wignerDjmn(j, m, n, α, β, γ), atol=1e-14, rtol = sqrt(eps(Float64)))
+            end
+            @test det(D) ≈ 1
+            @test D' * D ≈ Diagonal(ones(Int(2j+1)))
+
+            Dinv = wignerD(j, -γ, -β, -α)
+            @test inv(D) ≈ Dinv
+            @test D' ≈ Dinv
+        end
     end
 end
 

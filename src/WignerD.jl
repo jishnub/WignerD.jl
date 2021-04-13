@@ -16,19 +16,19 @@ Base.AbstractFloat(p::SpecialCoLatitudes) = Float64(p)
 """
     Equator
 
-Alias for `θ = π/2` in spherical polar coordinates.
+Alias for `β = π/2` in spherical polar coordinates.
 """
 struct Equator <: SpecialCoLatitudes end
 """
     NorthPole
 
-Alias for `θ = 0` in spherical polar coordinates.
+Alias for `β = 0` in spherical polar coordinates.
 """
 struct NorthPole <: SpecialCoLatitudes end
 """
     SouthPole
 
-Alias for `θ = π` in spherical polar coordinates.
+Alias for `β = π` in spherical polar coordinates.
 """
 struct SouthPole <: SpecialCoLatitudes end
 
@@ -180,43 +180,50 @@ function Jy_eigen(j)
 end
 
 """
-    wignerdjmn(j, m, n, θ::Real)
+    wignerdjmn(j, m, n, β::Real)
 
-Evaluate the Wigner d-matrix element ``d^j_{m,n}(θ)``.
+Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``.
 """
-wignerdjmn(j, m, n, θ::Real) = wignerdjmn(j, m, n, θ, Jy_eigen(j)...)
-Base.@propagate_inbounds function wignerdjmn(j, m, n, θ::Real, λ, v)
+wignerdjmn(j, m, n, β::Real) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Real, λ, v)
     dj_m_n = zero(ComplexF64)
 
     for (μ, λμ) in zip(UnitRange(axes(v, 1)), λ)
-        dj_m_n += cis(-λμ * θ) * v[μ, m] * conj(v[μ, n])
+        dj_m_n += cis(-λμ * β) * v[μ, m] * conj(v[μ, n])
     end
 
     real(dj_m_n)
 end
 
-wignerdjmn(j, m, n, θ::NorthPole) = wignerdjmn(j, m, n, θ, nothing, nothing)
-function wignerdjmn(j, m, n, θ::NorthPole, λ, v)
+wignerdjmn(j, m, n, β::NorthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
+function wignerdjmn(j, m, n, β::NorthPole, λ, v)
     (m == n) ? one(Float64) : zero(Float64)
 end
 
-wignerdjmn(j, m, n, θ::SouthPole) = wignerdjmn(j, m, n, θ, nothing, nothing)
-function wignerdjmn(j, m, n, θ::SouthPole, λ, v)
+wignerdjmn(j, m, n, β::SouthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
+function wignerdjmn(j, m, n, β::SouthPole, λ, v)
     (m == -n) ? iseven(Int(j - n)) ? Float64(1) : Float64(-1) : zero(Float64)
 end
 
-Base.@propagate_inbounds function wignerdjmn(j, m, n, θ::Equator, λ, v)
+Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Equator, λ, v)
     dj_m_n = zero(ComplexF64)
 
     if !((isodd(Int(j + m)) && n == 0) || (isodd(Int(j + n)) && m == 0))
         for (μ, λμ) in zip(axes(v, 1), λ)
-            dj_m_n += _cis(-λμ, θ) * v[μ, m] * conj(v[μ, n])
+            dj_m_n += _cis(-λμ, β) * v[μ, m] * conj(v[μ, n])
         end
     end
     real(dj_m_n)
 end
 
-Base.@propagate_inbounds function wignerd!(dj, j, θ::NorthPole, λ, v)
+@doc raw"""
+    wignerDjmn(j, m, n, α::Real, β::Real, γ::Real)
+
+Evaluate the Wigner D-matrix element ``D^j_{m,n}(\alpha,\beta,\gamma)``.
+"""
+wignerDjmn(j, m, n, α::Real, β::Real, γ::Real) = wignerdjmn(j, m, n, β) * cis(-(α * m + γ * n))
+
+Base.@propagate_inbounds function wignerd!(dj, j, β::NorthPole, λ, v)
     dj_noof = OffsetArrays.no_offset_view(dj)
     for ind in diagind(dj_noof)
         dj_noof[ind] = one(eltype(dj))
@@ -224,7 +231,7 @@ Base.@propagate_inbounds function wignerd!(dj, j, θ::NorthPole, λ, v)
     return dj
 end
 
-Base.@propagate_inbounds function wignerd!(dj, j, θ::SouthPole, λ, v)
+Base.@propagate_inbounds function wignerd!(dj, j, β::SouthPole, λ, v)
     dj_w = WignerMatrix(j, OffsetArrays.no_offset_view(dj))
 
     even = true
@@ -235,13 +242,13 @@ Base.@propagate_inbounds function wignerd!(dj, j, θ::SouthPole, λ, v)
     return dj
 end
 
-Base.@propagate_inbounds function wignerd!(dj, j, θ, λ, v)
+Base.@propagate_inbounds function wignerd!(dj, j, β, λ, v)
     @boundscheck @assert size(dj) == _matrixsize(j) "size of dj must be $(Int(2j+1))×$(Int(2j+1))"
 
     dj_w = _offsetmatrix(j, dj)
 
     for n in _unitrange(-j, 0), m in _unitrange(n, -n)
-        dj_w[m, n] = real(wignerdjmn(j, m, n, θ, λ, v))
+        dj_w[m, n] = real(wignerdjmn(j, m, n, β, λ, v))
     end
 
     # Use symmetries to fill up other terms
@@ -267,31 +274,31 @@ Base.@propagate_inbounds function wignerd!(dj, j, θ, λ, v)
 end
 
 """
-    wignerd!(d, j, θ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
+    wignerd!(d, j, β::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``,
+Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(β)`` for the angular momentum ``j`` and the rotation angle ``β``,
 and store the result in `d`.
 The momentum ``j`` may be an integer or a half-integer, and must be non-negative.
 Optionally the pre-allocated matrix `Jy` may be provided,
 which must be a `ComplexF64` matrix of size `(2j+1, 2j+1)`, and may be overwritten during the calculation.
 """
-Base.@propagate_inbounds function wignerd!(d, j, θ::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
+Base.@propagate_inbounds function wignerd!(d, j, β::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
     λ, v = Jy_eigen(j, Jy)
-    wignerd!(d, j, θ, λ, v)
+    wignerd!(d, j, β, λ, v)
     return d
 end
 
 """
-    wignerd(j, θ::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
+    wignerd(j, β::Real, [Jy = zeros(ComplexF64, 2j+1, 2j+1)])
 
-Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(θ)`` for the angular momentum ``j`` and the angle ``θ``.
+Evaluate the Wigner d-matrix with elements ``d^j_{m,n}(β)`` for the angular momentum ``j`` and the rotation angle ``β``.
 The momentum ``j`` may be an
 integer or a half-integer, and must be non-negative. Optionally the pre-allocated matrix `Jy` may be provided,
 which must be a `ComplexF64` matrix of size `(2j+1, 2j+1)`, and may be overwritten during the calculation.
 """
-function wignerd(j, θ::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
+function wignerd(j, β::Real, Jy = zeros(ComplexF64, _matrixsize(j)))
     d = zeros(_matrixsize(j))
-    @inbounds wignerd!(d, j, θ, Jy)
+    @inbounds wignerd!(d, j, β, Jy)
     return d
 end
 
