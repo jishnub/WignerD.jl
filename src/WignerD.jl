@@ -91,7 +91,7 @@ struct WignerMatrix{T, J <: Union{Integer, HalfInteger}, A<:AbstractMatrix{T}} <
     function WignerMatrix{T, J, A}(j::J, D::A) where {T, J<:Union{Integer, HalfInteger}, A<:AbstractMatrix{T}}
         @assert j >= 0 "j must be >= 0"
         @assert size(D, 1) == size(D, 2) == 2j+1 "size of matrix must be $(2j+1)×$(2j+1)"
-        Base.require_one_based_indexing(D)
+        Base.has_offset_axes(D) && throw(ArgumentError("D must have 1-based indices"))
         new{T, J, A}(j, D)
     end
 end
@@ -154,6 +154,17 @@ end
 _offsetmatrix(j::Integer, D::AbstractMatrix) = OffsetArray(D, -j:j, -j:j)
 _offsetmatrix(j::Real, D::AbstractMatrix) = WignerMatrix(j, D)
 
+if VERSION >= v"1.2"
+    _eigen_sorted!(Jy_filled) = eigen!(Jy_filled, sortby = identity)
+else
+    function _eigen_sorted!(Jy_filled)
+        λ, v = eigen!(Jy_filled)
+        p = sortperm(λ)
+        v = v[:, p]
+        return λ, v
+    end
+end
+
 function Jy_eigen(j, Jy)
     key = UInt(2j + 1)
     if key in keys(JyEigenDict)
@@ -161,7 +172,7 @@ function Jy_eigen(j, Jy)
     end
 
     Jy_filled = coeffi(j, Jy)
-    _, v = eigen!(Jy_filled, sortby = identity)
+    _, v = _eigen_sorted!(Jy_filled)
 
     # Store the eigenvectors along rows
     vp = permutedims(v)
