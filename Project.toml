@@ -1,6 +1,6 @@
 name = "WignerD"
 uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 HalfIntegers = "f0d1745a-41c9-11e9-1dd9-e5d34d218721"
@@ -11,7 +11,7 @@ OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Aqua = "0.5"
 HalfIntegers = "1"
 OffsetArrays = "0.11, 1"
-julia = "1"
+julia = "1.2"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
