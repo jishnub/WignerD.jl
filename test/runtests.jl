@@ -51,25 +51,25 @@ end
     	end
     end
 
-	function test_special(j)
+	function test_special(j, Jy...)
         @testset "Equator" begin
             for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π/2)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, Equator())
+            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π/2, Jy...)
+            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, Equator(), Jy...)
             	testapprox(m, n, dj_m_n, dj_m_n2)
             end
         end
         @testset "NorthPole" begin
             for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, 0)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, NorthPole())
+            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, 0, Jy...)
+            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, NorthPole(), Jy...)
             	testapprox(m, n, dj_m_n, dj_m_n2)
             end
         end
         @testset "SouthPole" begin
             for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, SouthPole())
+            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π, Jy...)
+            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, SouthPole(), Jy...)
             	testapprox(m, n, dj_m_n, dj_m_n2)
             end
         end
@@ -77,21 +77,35 @@ end
 
     for j in 0:3
         test_special(j)
+        Jy = zeros(ComplexF64, 2j+1, 2j+1)
+        test_special(j, Jy)
     end
     for j in half(1):1:half(7)
         test_special(j)
+        Jy = zeros(ComplexF64, Int(2j+1), Int(2j+1))
+        test_special(j, Jy)
     end
 
     @testset "wignerDjmn" begin
-        for j in 0:3, β in LinRange(0, pi, 10), m in -j:j, n in -j:j
-            Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
-            djmn = WignerD.wignerdjmn(j, m, n, β)
-            @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+        for j in 0:3
+            Jy = zeros(ComplexF64, 2j+1, 2j+1)
+            for β in LinRange(0, pi, 10), m in -j:j, n in -j:j
+                Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
+                Djmn2 = WignerD.wignerDjmn(j, m, n, 0, β, 0, Jy)
+                @test Djmn == Djmn2
+                djmn = WignerD.wignerdjmn(j, m, n, β)
+                @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+            end
         end
-        for j in half(1):1:half(7), β in LinRange(0, pi, 10), m in -j:j, n in -j:j
-            Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
-            djmn = WignerD.wignerdjmn(j, m, n, β)
-            @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+        for j in half(1):1:half(7)
+            Jy = zeros(ComplexF64, Int(2j+1), Int(2j+1))
+            for β in LinRange(0, pi, 10), m in -j:j, n in -j:j
+                Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
+                Djmn2 = WignerD.wignerDjmn(j, m, n, 0, β, 0, Jy)
+                @test Djmn == Djmn2
+                djmn = WignerD.wignerdjmn(j, m, n, β)
+                @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
+            end
         end
     end
 end

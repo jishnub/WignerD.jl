@@ -191,11 +191,13 @@ function Jy_eigen(j)
 end
 
 """
-    wignerdjmn(j, m, n, β::Real)
+    wignerdjmn(j, m, n, β::Real, [Jy::AbstractMatrix{ComplexF64}])
 
-Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``.
+Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``. Optionally a pre-allocated matrix `Jy` may be provided,
+which must be of size `(2j+1, 2j+1)`.
 """
-wignerdjmn(j, m, n, β::Real) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Real) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Real, Jy) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
 Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Real, λ, v)
     dj_m_n = zero(ComplexF64)
 
@@ -207,15 +209,19 @@ Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Real, λ, v)
 end
 
 wignerdjmn(j, m, n, β::NorthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
+wignerdjmn(j, m, n, β::NorthPole, Jy) = wignerdjmn(j, m, n, β)
 function wignerdjmn(j, m, n, β::NorthPole, λ, v)
     (m == n) ? one(Float64) : zero(Float64)
 end
 
 wignerdjmn(j, m, n, β::SouthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
+wignerdjmn(j, m, n, β::SouthPole, Jy) = wignerdjmn(j, m, n, β)
 function wignerdjmn(j, m, n, β::SouthPole, λ, v)
     (m == -n) ? iseven(Int(j - n)) ? Float64(1) : Float64(-1) : zero(Float64)
 end
 
+wignerdjmn(j, m, n, β::Equator) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Equator, Jy) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
 Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Equator, λ, v)
     dj_m_n = zero(ComplexF64)
 
@@ -228,11 +234,12 @@ Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Equator, λ, v)
 end
 
 @doc raw"""
-    wignerDjmn(j, m, n, α::Real, β::Real, γ::Real)
+    wignerDjmn(j, m, n, α::Real, β::Real, γ::Real, [Jy::AbstractMatrix{ComplexF64}])
 
-Evaluate the Wigner D-matrix element ``D^j_{m,n}(\alpha,\beta,\gamma)``.
+Evaluate the Wigner D-matrix element ``D^j_{m,n}(\alpha,\beta,\gamma)``. Optionally a pre-allocated matrix `Jy` may be provided,
+which must be of size `(2j+1, 2j+1)`.
 """
-wignerDjmn(j, m, n, α::Real, β::Real, γ::Real) = wignerdjmn(j, m, n, β) * cis(-(α * m + γ * n))
+wignerDjmn(j, m, n, α::Real, β::Real, γ::Real, Jy...) = wignerdjmn(j, m, n, β, Jy...) * cis(-(α * m + γ * n))
 
 Base.@propagate_inbounds function wignerd!(dj, j, β::NorthPole, λ, v)
     dj_noof = OffsetArrays.no_offset_view(dj)

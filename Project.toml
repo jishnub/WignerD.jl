@@ -1,6 +1,6 @@
 name = "WignerD"
 uuid = "87c4ff3e-34df-11e9-37a7-516cea4e0402"
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 HalfIntegers = "f0d1745a-41c9-11e9-1dd9-e5d34d218721"
