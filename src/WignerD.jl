@@ -36,12 +36,12 @@ Base.Float64(::NorthPole) = zero(Float64)
 Base.Float64(::SouthPole) = Float64(pi)
 Base.Float64(::Equator) = Float64(π/2)
 
-Base.cos(::NorthPole) = one(Float64)
-Base.cos(::SouthPole) = -one(Float64)
+Base.cos(::NorthPole) = oneunit(Float64)
+Base.cos(::SouthPole) = -oneunit(Float64)
 Base.sin(::Union{NorthPole, SouthPole}) = zero(Float64)
 
 Base.cos(::Equator) = zero(Float64)
-Base.sin(::Equator) = one(Float64)
+Base.sin(::Equator) = oneunit(Float64)
 
 # Returns exp(i α π/2) = cos(α π/2) + i*sin(α π/2) for integer α
 function _cis(α::Integer, ::Equator)
@@ -211,7 +211,7 @@ end
 wignerdjmn(j, m, n, β::NorthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
 wignerdjmn(j, m, n, β::NorthPole, Jy) = wignerdjmn(j, m, n, β)
 function wignerdjmn(j, m, n, β::NorthPole, λ, v)
-    (m == n) ? one(Float64) : zero(Float64)
+    (m == n) ? oneunit(Float64) : zero(Float64)
 end
 
 wignerdjmn(j, m, n, β::SouthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
@@ -244,7 +244,7 @@ wignerDjmn(j, m, n, α::Real, β::Real, γ::Real, Jy...) = wignerdjmn(j, m, n, �
 Base.@propagate_inbounds function wignerd!(dj, j, β::NorthPole, λ, v)
     dj_noof = OffsetArrays.no_offset_view(dj)
     for ind in diagind(dj_noof)
-        dj_noof[ind] = one(eltype(dj))
+        dj_noof[ind] = oneunit(eltype(dj))
     end
     return dj
 end
@@ -254,7 +254,7 @@ Base.@propagate_inbounds function wignerd!(dj, j, β::SouthPole, λ, v)
 
     even = true
     for m in _indrange(j)
-        dj_w[m, -m] = even ? one(eltype(dj)) : -one(eltype(dj))
+        dj_w[m, -m] = even ? oneunit(eltype(dj)) : -oneunit(eltype(dj))
         even = !even
     end
     return dj
@@ -271,17 +271,13 @@ Base.@propagate_inbounds function wignerd!(dj, j, β, λ, v)
 
     # Use symmetries to fill up other terms
     # dj[m,n] = (-1)^(m-n) * dj[-m,-n]
-    for n in _half_or_one_to(j)
-        for m in _unitrange(-n, n)
-            dj_w[m, n] = (-1)^(m-n) * dj_w[-m, -n]
-        end
+    for n in _half_or_one_to(j), m in _unitrange(-n, n)
+        dj_w[m, n] = (-1)^(m-n) * dj_w[-m, -n]
     end
 
     # dj[m,n] = (-1)^(m-n) * dj[n,m]
-    for m in _half_or_one_to(j)
-        for n in _unitrange(-m, m)
-            dj_w[m, n] = (-1)^(m-n) * dj_w[n, m]
-        end
+    for m in _half_or_one_to(j), n in _unitrange(-m, m)
+        dj_w[m, n] = (-1)^(m-n) * dj_w[n, m]
     end
 
     for m in _unitrange(-j, -1), n in _unitrange(m, -m)
