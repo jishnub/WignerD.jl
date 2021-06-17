@@ -113,7 +113,6 @@ end
 Base.IndexStyle(::Type{<:WignerMatrix{<:Any, <:Any, A}}) where {A} = IndexStyle(A)
 Base.parent(w::WignerMatrix) = w.D
 Base.size(w::WignerMatrix) = size(parent(w))
-Base.axes(w::WignerMatrix) = (OffsetArrays.IdentityUnitRange(-w.j:w.j), OffsetArrays.IdentityUnitRange(-w.j:w.j))
 _index(j, m) = (x = Integer(j + m); x + oneunit(x))
 # CartesianIndexing
 Base.@propagate_inbounds Base.getindex(w::WignerMatrix, m::Real, n::Real) = parent(w)[_index(w.j, m), _index(w.j, n)]
@@ -158,16 +157,7 @@ end
 _offsetmatrix(j::Integer, D::AbstractMatrix) = OffsetArray(D, -j:j, -j:j)
 _offsetmatrix(j::Real, D::AbstractMatrix) = WignerMatrix(j, D)
 
-if VERSION >= v"1.2"
-    _eigen_sorted!(Jy_filled) = eigen!(Jy_filled, sortby = identity)
-else
-    function _eigen_sorted!(Jy_filled)
-        λ, v = eigen!(Jy_filled)
-        p = sortperm(λ)
-        v = v[:, p]
-        return λ, v
-    end
-end
+_eigen_sorted!(Jy_filled) = eigen!(Jy_filled, sortby = identity)
 
 function Jy_eigen(j, Jy)
     key = UInt(2j + 1)
