@@ -4,6 +4,8 @@ using Aqua
 using HalfIntegers
 using OffsetArrays
 using LinearAlgebra
+using Rotations
+using StaticArrays
 
 @testset "project quality" begin
     Aqua.test_all(WignerD)
@@ -13,9 +15,11 @@ end
 	@testset "Equator" begin
         @test promote_rule(Equator, Float64) == Float64
 	    for α = -10:10
-	    	@test (@inferred WignerD._cis(α, Equator())) ≈ cis(α*π/2)
-            @test (@inferred WignerD._cis(half(α), Equator())) ≈ cis(half(α)*π/2)
-            @test cis(α*Equator()) == cis(α*π/2)
+	    	@test (@inferred WignerD._sincos(α, Equator()))[1] ≈ sincos(α*π/2)[1] atol=1e-14 rtol=1e-8
+	    	@test (@inferred WignerD._sincos(α, Equator()))[2] ≈ sincos(α*π/2)[2] atol=1e-14 rtol=1e-8
+            @test (@inferred WignerD._sincos(half(α), Equator()))[1] ≈ sincos(half(α)*π/2)[1] atol=1e-14 rtol=1e-8
+            @test (@inferred WignerD._sincos(half(α), Equator()))[2] ≈ sincos(half(α)*π/2)[2] atol=1e-14 rtol=1e-8
+            @test sincos(α*Equator()) == sincos(α*π/2)
 	    end
     	@test @inferred cos(Equator()) == 0
     	@test @inferred sin(Equator()) == 1
@@ -52,25 +56,27 @@ end
     end
 
 	function test_special(j, Jy...)
-        @testset "Equator" begin
-            for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π/2, Jy...)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, Equator(), Jy...)
-            	testapprox(m, n, dj_m_n, dj_m_n2)
+        @testset "j = $j" begin
+            @testset "Equator" begin
+                for m in -j:j, n in -j:j
+                    dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π/2, Jy...)
+                    dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, Equator(), Jy...)
+                    testapprox(m, n, dj_m_n, dj_m_n2)
+                end
             end
-        end
-        @testset "NorthPole" begin
-            for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, 0, Jy...)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, NorthPole(), Jy...)
-            	testapprox(m, n, dj_m_n, dj_m_n2)
+            @testset "NorthPole" begin
+                for m in -j:j, n in -j:j
+                    dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, 0, Jy...)
+                    dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, NorthPole(), Jy...)
+                    testapprox(m, n, dj_m_n, dj_m_n2)
+                end
             end
-        end
-        @testset "SouthPole" begin
-            for m in -j:j, n in -j:j
-            	dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π, Jy...)
-            	dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, SouthPole(), Jy...)
-            	testapprox(m, n, dj_m_n, dj_m_n2)
+            @testset "SouthPole" begin
+                for m in -j:j, n in -j:j
+                    dj_m_n = @inferred WignerD.wignerdjmn(j, m, n, π, Jy...)
+                    dj_m_n2 = @inferred WignerD.wignerdjmn(j, m, n, SouthPole(), Jy...)
+                    testapprox(m, n, dj_m_n, dj_m_n2)
+                end
             end
         end
     end
@@ -113,7 +119,7 @@ end
 function testwignerd(testelements, j, θ)
     d = wignerd(j, θ)
     testelements(WignerD._offsetmatrix(j, d), θ)
-    @test wignerd(HalfInt(j), θ) == d
+    @test wignerd(HalfInt(j), θ) ≈ d atol=1e-14 rtol=1e-8
     @test isapprox(tr(d), sum(cos(m*θ) for m in -j:j), atol = 1e-14, rtol = sqrt(eps(Float64)))
     @test det(d) ≈ 1
 end
@@ -354,4 +360,27 @@ end
     w = WignerD._offsetmatrix(0.5, wignerd(0.5, 0))
     @test IndexStyle(w) == IndexStyle(parent(w))
     @test size(w) == (2,2)
+end
+
+@testset "comparison with Cartesian rotations" begin
+    # The spherical covariant basis transforms through D¹*
+    # The Cartesian basis transforms through RotZYZ
+    # The two may be related through U * RotZYZ(α,β,γ) * U' == D¹*(α,β,γ)
+    # where U is the matrix that converts from Cartesian to spherical covariant bases
+    # U * [ex, ey, ez] == [χ₋₁, χ₀, χ₊₁]
+    U = SMatrix{3,3}(
+        [
+            1/√2   -im/√2   0
+            0       0       1
+            -1/√2  -im/√2   0
+        ]
+    )
+    j = 1
+    Jy = zeros(ComplexF64, 3, 3)
+    D = zeros(ComplexF64, 3, 3)
+    for α in LinRange(0, 2pi, 10), β in LinRange(0, 2pi, 10), γ in LinRange(0, 2pi, 10)
+        wignerD!(D, j, α, β, γ)
+        conj!(D)
+        @test D ≈ U * RotZYZ(α, β, γ) * U'
+    end
 end

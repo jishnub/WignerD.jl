@@ -3,6 +3,8 @@ module WignerD
 using OffsetArrays
 using LinearAlgebra
 using HalfIntegers
+using StructArrays
+using LoopVectorization
 
 export wignerd!
 export wignerd
@@ -44,7 +46,7 @@ Base.cos(::Equator) = zero(Float64)
 Base.sin(::Equator) = one(Float64)
 
 # Returns exp(i α π/2) = cos(α π/2) + i*sin(α π/2) for integer α
-function _cis(α::Integer, ::Equator)
+function _sincos(α::Integer, ::Equator)
     αmod4 = mod(Int(α), 4)
     if αmod4 == 0
         res = ComplexF64(1, 0)
@@ -55,9 +57,10 @@ function _cis(α::Integer, ::Equator)
     elseif αmod4 == 3
         res = ComplexF64(0, -1)
     end
-    return res
+    c, s = real(res), imag(res)
+    return s, c
 end
-function _cis(α::HalfInteger, ::Equator)
+function _sincos(α::HalfInteger, ::Equator)
     αmod4 = mod(Int(2α), 8)
     if αmod4 == 0
         res = ComplexF64(1, 0)
@@ -76,7 +79,8 @@ function _cis(α::HalfInteger, ::Equator)
     elseif αmod4 == 7
         res = ComplexF64(1, -1)/√2
     end
-    return res
+    c, s = real(res), imag(res)
+    return s, c
 end
 
 #########################################################################
@@ -131,7 +135,7 @@ _matrixsize(j::Real) = (Int(2j + 1), Int(2j + 1))
 # stores (2j+1) => eigvecs(Jy(j))
 #########################################################################
 
-const JyEigenDict = Dict{UInt, Matrix{ComplexF64}}()
+const JyEigenDict = Dict(UInt(1) => StructArray{ComplexF64}((ones(1,1), zeros(1,1))))
 
 ##########################################################################
 # Wigner d matrix
@@ -168,22 +172,21 @@ end
 function Jy_eigen(j, Jy)
     key = UInt(2j + 1)
     if key in keys(JyEigenDict)
-        return _indrange(j), _offsetmatrix(j, JyEigenDict[key])
+        return _indrange(j), JyEigenDict[key]
     end
 
     Jy_filled = coeffi(j, Jy)
     _, v = _eigen_sorted!(Jy_filled)
 
     # Store the eigenvectors along rows
-    vp = permutedims(v)
-    JyEigenDict[key] = vp
-    w = _offsetmatrix(j, vp)
-    return _indrange(j), w
+    vs = StructArray(permutedims(v))
+    JyEigenDict[key] = vs
+    return _indrange(j), vs
 end
 function Jy_eigen(j)
     key = UInt(2j + 1)
     if key in keys(JyEigenDict)
-        return _indrange(j), _offsetmatrix(j, JyEigenDict[key])
+        return _indrange(j), JyEigenDict[key]
     end
 
     Jy = zeros(ComplexF64, _matrixsize(j))
@@ -196,16 +199,28 @@ end
 Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``. Optionally a pre-allocated matrix `Jy` may be provided,
 which must be of size `(2j+1, 2j+1)`.
 """
-wignerdjmn(j, m, n, β::Real) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j)...)
-wignerdjmn(j, m, n, β::Real, Jy) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
-Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Real, λ, v)
-    dj_m_n = zero(ComplexF64)
+wignerdjmn(j, m, n, β::Real) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Real, Jy) = wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
+function wignerdjmn(j, m, n, β::Real, λ, v)
+    dj_m_n = zero(Float64)
 
-    for (μ, λμ) in zip(UnitRange(axes(v, 1)), λ)
-        dj_m_n += cis(-λμ * β) * v[μ, m] * conj(v[μ, n])
+    mind = Int(m + j + 1)
+    nind = Int(n + j + 1)
+
+    @assert mind in axes(v, 2) "m = $m (mind = $mind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
+    @assert nind in axes(v, 2) "n = $n (nind = $nind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
+    @assert size(v, 1) == 2j+1 "size(v, 1) is not $(2j+1) for j = $j"
+
+    jr = _indrange(j)
+    @turbo for μind in eachindex(jr)
+        μ = jr[μind]
+        s, c = sincos(-μ * float(β))
+        T1 = v.re[μind, mind] * v.re[μind, nind] + v.im[μind, mind] * v.im[μind, nind]
+        T2 = v.im[μind, mind] * v.re[μind, nind] - v.re[μind, mind] * v.im[μind, nind]
+        dj_m_n += c * T1 - s * T2
     end
 
-    real(dj_m_n)
+    dj_m_n
 end
 
 wignerdjmn(j, m, n, β::NorthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
@@ -220,17 +235,29 @@ function wignerdjmn(j, m, n, β::SouthPole, λ, v)
     (m == -n) ? iseven(Int(j - n)) ? Float64(1) : Float64(-1) : zero(Float64)
 end
 
-wignerdjmn(j, m, n, β::Equator) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j)...)
-wignerdjmn(j, m, n, β::Equator, Jy) = @inbounds wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
-Base.@propagate_inbounds function wignerdjmn(j, m, n, β::Equator, λ, v)
-    dj_m_n = zero(ComplexF64)
+wignerdjmn(j, m, n, β::Equator) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Equator, Jy) = wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
+function wignerdjmn(j, m, n, β::Equator, λ, v)
+    dj_m_n = zero(Float64)
+
+    mind = Int(m + j + 1)
+    nind = Int(n + j + 1)
+
+    @assert mind in axes(v, 2) "m = $m (mind = $mind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
+    @assert nind in axes(v, 2) "n = $n (nind = $nind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
+    @assert size(v, 1) == 2j+1 "size(v, 1) is not $(2j+1) for j = $j"
 
     if !((isodd(Int(j + m)) && n == 0) || (isodd(Int(j + n)) && m == 0))
-        for (μ, λμ) in zip(axes(v, 1), λ)
-            dj_m_n += _cis(-λμ, β) * v[μ, m] * conj(v[μ, n])
+        jr = _indrange(j)
+        @turbo for μind in eachindex(jr)
+            μ = jr[μind]
+            s, c = sincos(-μ * float(β))
+            T1 = v.re[μind, mind] * v.re[μind, nind] + v.im[μind, mind] * v.im[μind, nind]
+            T2 = v.im[μind, mind] * v.re[μind, nind] - v.re[μind, mind] * v.im[μind, nind]
+            dj_m_n += c * T1 - s * T2
         end
     end
-    real(dj_m_n)
+    dj_m_n
 end
 
 @doc raw"""
@@ -266,7 +293,7 @@ Base.@propagate_inbounds function wignerd!(dj, j, β, λ, v)
     dj_w = _offsetmatrix(j, dj)
 
     for n in _unitrange(-j, 0), m in _unitrange(n, -n)
-        dj_w[m, n] = real(wignerdjmn(j, m, n, β, λ, v))
+        dj_w[m, n] = wignerdjmn(j, m, n, β, λ, v)
     end
 
     # Use symmetries to fill up other terms
