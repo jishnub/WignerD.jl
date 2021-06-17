@@ -8,7 +8,11 @@ using Rotations
 using StaticArrays
 
 @testset "project quality" begin
-    Aqua.test_all(WignerD)
+    if VERSION >= v"1.6.0"
+        Aqua.test_all(WignerD)
+    else
+        Aqua.test_all(WignerD, ambiguities = false)
+    end
 end
 
 @testset "trigonometric functions for special points" begin
