@@ -75,10 +75,12 @@ D_{\mu\nu}^{1}\left(R\right) & =\left\langle \chi_{\mu}\right|U\left(R\right)\le
 
 ## Rotation of Spherical harmonics
 
-Spherical harmonics ``Y_{ℓm}(\hat{n})`` form an eigenbasis of ``J_z`` for ``j=\ell``. We assume that a rotation ``R`` takes the coordinate frame ``S`` to ``S^\prime``. We assume that a point has coordinates ``\hat{n}=(\theta,\phi)`` in ``S`` and ``\hat{n}^\prime=(\theta^\prime,\phi^\prime)`` in ``S^\prime``, where ``\hat{n}^\prime=R\hat{n}``. Under this rotation, spherical harmonics transform as
+Spherical harmonics ``Y_{ℓm}(\hat{n})`` form an eigenbasis of ``J_z`` for ``j=\ell``. We assume that a rotation ``R`` takes the coordinate frame ``S`` to ``S^\prime``. We assume that a point has coordinates ``\hat{n}=(\theta,\phi)`` in ``S`` and ``\hat{n}^\prime=(\theta^\prime,\phi^\prime)`` in ``S^\prime``, where ``\hat{n}^\prime=R^{-1}\hat{n}``. Under this rotation, spherical harmonics transform as
 
 ```math
-Y_{\ell m^{\prime}}\left(\hat{n}^{\prime}\right)=\sum_{m}D_{mm^{\prime}}^{\ell}\left(R\right)Y_{\ell m}\left(\hat{n}\right)
+\begin{aligned}
+Y_{\ell m^{\prime}}\left(\hat{n}^{\prime}\right)&=\sum_{m}D_{mm^{\prime}}^{\ell}\left(R\right)Y_{\ell m}\left(\hat{n}\right)\\&=\sum_{m}D_{mm^{\prime}}^{\ell}\left(R\right)Y_{\ell m}\left(R^{-1}\hat{n}^{\prime}\right).
+\end{aligned}
 ```
 
 ## Reference
