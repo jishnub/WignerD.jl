@@ -58,7 +58,7 @@ If we denote the transformation between the Cartesian and spherical covariant ba
 The conjugation here is a consequence of the fact that ``U`` has its columns summed over, whereas ``R`` and ``D`` have their rows summed over. If we choose the transpose ``V=U^T``, we may rewrite the relation as
 
 ```math
-D^{1}(R) = V^T R V
+D^{1}(R) = V^\dagger R V
 ```
 
 We may also derive this using the bra-ket notation as:
