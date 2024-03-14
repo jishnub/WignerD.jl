@@ -4,6 +4,7 @@ using OffsetArrays
 using LinearAlgebra
 using HalfIntegers
 using StructArrays
+using TaskLocalValues
 
 export wignerd!
 export wignerd
@@ -133,7 +134,8 @@ _matrixsize(j::Real) = (Int(2j + 1), Int(2j + 1))
 # stores (2j+1) => eigvecs(Jy(j))
 #########################################################################
 
-const JyEigenDict = Dict(UInt(1) => StructArray{ComplexF64}((ones(1,1), zeros(1,1))))
+const JyEigenDict = TaskLocalValue{Dict{UInt,typeof(StructArray{ComplexF64}((ones(0,0), zeros(0,0))))}}(
+                        ()->Dict(UInt(1) => StructArray{ComplexF64}((ones(1,1), zeros(1,1)))))
 
 ##########################################################################
 # Wigner d matrix
@@ -160,8 +162,8 @@ _eigen_sorted!(Jy_filled) = eigen!(Jy_filled, sortby = identity)
 
 function Jy_eigen(j, Jy)
     key = UInt(2j + 1)
-    if key in keys(JyEigenDict)
-        return _indrange(j), JyEigenDict[key]
+    if key in keys(JyEigenDict[])
+        return _indrange(j), JyEigenDict[][key]
     end
 
     Jy_filled = coeffi(j, Jy)
@@ -169,13 +171,13 @@ function Jy_eigen(j, Jy)
 
     # Store the eigenvectors along rows
     vs = StructArray(permutedims(v))
-    JyEigenDict[key] = vs
+    JyEigenDict[][key] = vs
     return _indrange(j), vs
 end
 function Jy_eigen(j)
     key = UInt(2j + 1)
-    if key in keys(JyEigenDict)
-        return _indrange(j), JyEigenDict[key]
+    if key in keys(JyEigenDict[])
+        return _indrange(j), JyEigenDict[][key]
     end
 
     Jy = zeros(ComplexF64, _matrixsize(j))
