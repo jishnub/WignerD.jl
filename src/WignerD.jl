@@ -4,7 +4,6 @@ using OffsetArrays
 using LinearAlgebra
 using HalfIntegers
 using StructArrays
-using LoopVectorization
 
 export wignerd!
 export wignerd
@@ -183,26 +182,17 @@ function Jy_eigen(j)
     Jy_eigen(j, Jy)
 end
 
-"""
-    wignerdjmn(j, m, n, β::Real, [Jy::AbstractMatrix{ComplexF64}])
-
-Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``. Optionally a pre-allocated matrix `Jy` may be provided,
-which must be of size `(2j+1, 2j+1)`.
-"""
-wignerdjmn(j, m, n, β::Real) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
-wignerdjmn(j, m, n, β::Real, Jy) = wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
-function wignerdjmn(j, m, n, β::Real, λ, v)
-    dj_m_n = zero(Float64)
-
+function _wignerdjmn(j, m, n, β, v)
     mind = Int(m + j + 1)
     nind = Int(n + j + 1)
-
-    @assert mind in axes(v, 2) "m = $m (mind = $mind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
-    @assert nind in axes(v, 2) "n = $n (nind = $nind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
-    @assert size(v, 1) == 2j+1 "size(v, 1) is not $(2j+1) for j = $j"
-
+    mind in axes(v, 2) ||
+        throw(ArgumentError("m = $m (mind = $mind) is inconsitent with axes(v, 2) = $(axes(v, 2))"))
+    nind in axes(v, 2) ||
+        throw(ArgumentError("n = $n (nind = $nind) is inconsitent with axes(v, 2) = $(axes(v, 2))"))
+    size(v, 1) == 2j+1 || throw(ArgumentError("size(v, 1) is not $(2j+1) for j = $j"))
+    dj_m_n = zero(Float64)
     jr = _indrange(j)
-    @turbo for μind in eachindex(jr)
+    @inbounds for μind in eachindex(jr)
         μ = jr[μind]
         s, c = sincos(-μ * float(β))
         T1 = v.re[μind, mind] * v.re[μind, nind] + v.im[μind, mind] * v.im[μind, nind]
@@ -212,6 +202,16 @@ function wignerdjmn(j, m, n, β::Real, λ, v)
 
     dj_m_n
 end
+
+"""
+    wignerdjmn(j, m, n, β::Real, [Jy::AbstractMatrix{ComplexF64}])
+
+Evaluate the Wigner d-matrix element ``d^j_{m,n}(β)``. Optionally a pre-allocated matrix `Jy` may be provided,
+which must be of size `(2j+1, 2j+1)`.
+"""
+wignerdjmn(j, m, n, β::Real) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
+wignerdjmn(j, m, n, β::Real, Jy) = wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
+wignerdjmn(j, m, n, β::Real, λ, v) = _wignerdjmn(j, m, n, β, v)
 
 wignerdjmn(j, m, n, β::NorthPole) = wignerdjmn(j, m, n, β, nothing, nothing)
 wignerdjmn(j, m, n, β::NorthPole, Jy) = wignerdjmn(j, m, n, β)
@@ -228,26 +228,10 @@ end
 wignerdjmn(j, m, n, β::Equator) = wignerdjmn(j, m, n, β, Jy_eigen(j)...)
 wignerdjmn(j, m, n, β::Equator, Jy) = wignerdjmn(j, m, n, β, Jy_eigen(j, Jy)...)
 function wignerdjmn(j, m, n, β::Equator, λ, v)
-    dj_m_n = zero(Float64)
-
-    mind = Int(m + j + 1)
-    nind = Int(n + j + 1)
-
-    @assert mind in axes(v, 2) "m = $m (mind = $mind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
-    @assert nind in axes(v, 2) "n = $n (nind = $nind) is inconsitent with axes(v, 2) = $(axes(v, 2))"
-    @assert size(v, 1) == 2j+1 "size(v, 1) is not $(2j+1) for j = $j"
-
     if !((isodd(Int(j + m)) && n == 0) || (isodd(Int(j + n)) && m == 0))
-        jr = _indrange(j)
-        @turbo for μind in eachindex(jr)
-            μ = jr[μind]
-            s, c = sincos(-μ * float(β))
-            T1 = v.re[μind, mind] * v.re[μind, nind] + v.im[μind, mind] * v.im[μind, nind]
-            T2 = v.im[μind, mind] * v.re[μind, nind] - v.re[μind, mind] * v.im[μind, nind]
-            dj_m_n += c * T1 - s * T2
-        end
+        return _wignerdjmn(j, m, n, β, v)
     end
-    dj_m_n
+    return zero(Float64)
 end
 
 @doc raw"""
