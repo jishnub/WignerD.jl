@@ -93,7 +93,7 @@ end
     end
 
     @testset "wignerDjmn" begin
-        for j in 0:3
+        Threads.@threads for j in 0:3
             Jy = zeros(ComplexF64, 2j+1, 2j+1)
             for β in LinRange(0, pi, 10), m in -j:j, n in -j:j
                 Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
@@ -103,7 +103,7 @@ end
                 @test isapprox(Djmn, djmn, atol = 1e-14, rtol = sqrt(eps(Float64)))
             end
         end
-        for j in half(1):1:half(7)
+        Threads.@threads for j in half(1):1:half(7)
             Jy = zeros(ComplexF64, Int(2j+1), Int(2j+1))
             for β in LinRange(0, pi, 10), m in -j:j, n in -j:j
                 Djmn = WignerD.wignerDjmn(j, m, n, 0, β, 0)
@@ -132,7 +132,7 @@ end
     n = 100
     j = 0
 
-    for θ in LinRange(0, π, n)
+    Threads.@threads for θ in LinRange(0, π, n)
         testwignerd(test, j, θ)
     end
 
@@ -161,7 +161,7 @@ end
     n = 100
     j = half(1)
 
-    for θ in LinRange(0, π, n)
+    Threads.@threads for θ in LinRange(0, π, n)
         testwignerd(test, j, θ)
     end
 
@@ -196,7 +196,7 @@ end
 	n = 100
     j = 1
 
-	for θ in LinRange(0, π, n)
+	Threads.@threads for θ in LinRange(0, π, n)
 		testwignerd(test, j, θ)
 	end
 
@@ -239,7 +239,7 @@ end
     n = 100
     j = 3/2
 
-    for θ in LinRange(0, π, n)
+    Threads.@threads for θ in LinRange(0, π, n)
         testwignerd(test, j, θ)
     end
 
@@ -292,7 +292,7 @@ end
     n = 100
 	j = 2
 
-    for θ in LinRange(0, π, n)
+    Threads.@threads for θ in LinRange(0, π, n)
         testwignerd(test, j, θ)
     end
 
@@ -336,22 +336,24 @@ end
 end
 
 @testset "WignerD" begin
-    for β in LinRange(0, pi, 10), j in 0:half(1):3
-        d = wignerd(j, β)
-        D = wignerD(j, 0, β, 0)
-        @test d == D
-        for α in LinRange(0, 2pi, 10), γ in LinRange(0, 2pi, 10)
-            D = wignerD(j, α, β, γ)
-            D_w = WignerD._offsetmatrix(j, D)
-            for n in -j:j, m in -j:j
-                @test isapprox(D_w[m, n], WignerD.wignerDjmn(j, m, n, α, β, γ), atol=1e-14, rtol = sqrt(eps(Float64)))
-            end
-            @test det(D) ≈ 1
-            @test D' * D ≈ Diagonal(ones(Int(2j+1)))
+    Threads.@threads for β in LinRange(0, pi, 10)
+        for j in 0:half(1):3
+            d = wignerd(j, β)
+            D = wignerD(j, 0, β, 0)
+            @test d == D
+            for α in LinRange(0, 2pi, 10), γ in LinRange(0, 2pi, 10)
+                D = wignerD(j, α, β, γ)
+                D_w = WignerD._offsetmatrix(j, D)
+                for n in -j:j, m in -j:j
+                    @test isapprox(D_w[m, n], WignerD.wignerDjmn(j, m, n, α, β, γ), atol=1e-14, rtol = sqrt(eps(Float64)))
+                end
+                @test det(D) ≈ 1
+                @test D' * D ≈ Diagonal(ones(Int(2j+1)))
 
-            Dinv = wignerD(j, -γ, -β, -α)
-            @test inv(D) ≈ Dinv
-            @test D' ≈ Dinv
+                Dinv = wignerD(j, -γ, -β, -α)
+                @test inv(D) ≈ Dinv
+                @test D' ≈ Dinv
+            end
         end
     end
 end

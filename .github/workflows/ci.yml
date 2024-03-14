@@ -15,6 +15,10 @@ on:
       - 'LICENSE.md'
       - 'README.md'
       - '.github/workflows/TagBot.yml'
+
+env:
+  JULIA_NUM_THREADS: 2
+
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
